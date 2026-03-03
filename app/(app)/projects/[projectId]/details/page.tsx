@@ -50,7 +50,7 @@ export default function DetailsPage() {
           .eq("project_id", projectId)
           .order("version", { ascending: false })
           .limit(1)
-          .single(),
+          .maybeSingle(),
         supabase
           .from("projects")
           .select("output_type")

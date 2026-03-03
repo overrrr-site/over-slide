@@ -39,6 +39,7 @@ const COLOR_HEADER_BG = "16213E";
 const COLOR_HEADER_TEXT = "FFFFFF";
 const COLOR_BORDER = "D0D0D0";
 const COLOR_ALT_ROW = "F7F8FA";
+const CONTENT_WIDTH_DXA = 9026; // A4 width (11906) - left (1440) - right (1440) margins
 
 /**
  * DocumentData からWord文書を生成し、Buffer を返す。
@@ -140,6 +141,7 @@ export async function generateDocx(data: DocumentData): Promise<Buffer> {
           },
           paragraph: {
             spacing: { before: 360, after: 200 },
+            outlineLevel: 0,
           },
         },
         heading2: {
@@ -151,6 +153,7 @@ export async function generateDocx(data: DocumentData): Promise<Buffer> {
           },
           paragraph: {
             spacing: { before: 280, after: 160 },
+            outlineLevel: 1,
           },
         },
         heading3: {
@@ -162,6 +165,7 @@ export async function generateDocx(data: DocumentData): Promise<Buffer> {
           },
           paragraph: {
             spacing: { before: 200, after: 100 },
+            outlineLevel: 2,
           },
         },
       },
@@ -254,7 +258,7 @@ export async function generateDocx(data: DocumentData): Promise<Buffer> {
   return buffer as Buffer;
 }
 
-// ── セクション構築（改ページなし＝ビジネス文書として連続表示） ──
+// ── セクション構築（章見出し=改ページ、節・項=連続表示） ──
 function buildSection(children: DocChild[], section: DocxSection): void {
   const headingMap: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
     1: HeadingLevel.HEADING_1,
@@ -268,6 +272,7 @@ function buildSection(children: DocChild[], section: DocxSection): void {
       new Paragraph({
         text: section.title,
         heading: headingMap[section.level],
+        ...(section.level === 1 ? { pageBreakBefore: true } : {}),
       })
     );
   }
@@ -351,6 +356,12 @@ function buildSection(children: DocChild[], section: DocxSection): void {
 
 // ── 表の構築（偶数行に背景色、洗練されたスタイル） ──
 function buildTable(data: DocxTableData): Table {
+  const colCount = data.headers.length;
+  const colWidth = Math.floor(CONTENT_WIDTH_DXA / colCount);
+  const columnWidths = Array(colCount).fill(colWidth) as number[];
+  // 最終カラムで端数を吸収
+  columnWidths[colCount - 1] = CONTENT_WIDTH_DXA - colWidth * (colCount - 1);
+
   const borderStyle = {
     style: BorderStyle.SINGLE,
     size: 1,
@@ -367,7 +378,7 @@ function buildTable(data: DocxTableData): Table {
   const headerRow = new TableRow({
     tableHeader: true,
     children: data.headers.map(
-      (h) =>
+      (h, i) =>
         new TableCell({
           children: [
             new Paragraph({
@@ -382,10 +393,11 @@ function buildTable(data: DocxTableData): Table {
               ],
             }),
           ],
+          width: { size: columnWidths[i], type: WidthType.DXA },
           shading: {
             fill: COLOR_HEADER_BG,
-            type: ShadingType.SOLID,
-            color: COLOR_HEADER_BG,
+            type: ShadingType.CLEAR,
+            color: "auto",
           },
           borders,
           margins: {
@@ -400,7 +412,7 @@ function buildTable(data: DocxTableData): Table {
     (row, rowIdx) =>
       new TableRow({
         children: row.map(
-          (cell) =>
+          (cell, colIdx) =>
             new TableCell({
               children: [
                 new Paragraph({
@@ -414,8 +426,9 @@ function buildTable(data: DocxTableData): Table {
                   ],
                 }),
               ],
+              width: { size: columnWidths[colIdx], type: WidthType.DXA },
               shading: rowIdx % 2 === 1
-                ? { fill: COLOR_ALT_ROW, type: ShadingType.SOLID, color: COLOR_ALT_ROW }
+                ? { fill: COLOR_ALT_ROW, type: ShadingType.CLEAR, color: "auto" }
                 : undefined,
               borders,
               margins: {
@@ -427,7 +440,8 @@ function buildTable(data: DocxTableData): Table {
   );
 
   return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths,
     rows: [headerRow, ...dataRows],
   });
 }

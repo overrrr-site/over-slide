@@ -17,7 +17,8 @@ interface HtmlSlide {
 function buildDocumentData(
   pages: Record<string, unknown>[],
   projectTitle: string,
-  clientName?: string
+  clientName?: string,
+  outputType?: "slide" | "document"
 ): DocumentData {
   let docTitle = projectTitle;
   let docSubtitle: string | undefined;
@@ -62,12 +63,35 @@ function buildDocumentData(
 
       case "SECTION": {
         // スライド用: セクション区切り → 章見出し (level 1)
-        // 文書用では CHAPTER が chapter になるため、この case は後方互換用
-        sections.push({
-          level: 1,
+        // 文書用: 節見出し (level 2) — CHAPTER(H1) → SECTION(H2) の階層を守る
+        const sectionLevel = outputType === "document" ? 2 : 1;
+        const sectionObj: DocxSection = {
+          level: sectionLevel as 1 | 2 | 3,
           title,
-          body: page.body as string | undefined,
-        });
+        };
+        const sBody = page.body as string | string[] | undefined;
+        const sBullets = page.bullets as
+          | string[]
+          | Array<{ text: string }>
+          | undefined;
+        const sTable = page.table as
+          | { headers: string[]; rows: string[][] }
+          | undefined;
+
+        if (sBody) {
+          sectionObj.body = sBody;
+        }
+        if (sBullets && sBullets.length > 0) {
+          if (sBody) {
+            sectionObj.bullets = normalizeBullets(sBullets);
+          } else {
+            sectionObj.body = normalizeBullets(sBullets);
+          }
+        }
+        if (sTable) {
+          sectionObj.table = sTable as DocxTableData;
+        }
+        sections.push(sectionObj);
         break;
       }
 
@@ -384,7 +408,7 @@ export default function DesignPage() {
         .eq("project_id", projectId)
         .order("version", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (structureData) {
         const { data: contents } = await supabase
@@ -534,7 +558,8 @@ export default function DesignPage() {
       const documentData = buildDocumentData(
         pageContents,
         projectTitle || "ドキュメント",
-        clientName
+        clientName,
+        outputType
       );
 
       const res = await fetch("/api/docx/generate", {

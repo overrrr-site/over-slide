@@ -9,7 +9,7 @@ import {
   isLowSignalInstruction,
 } from "@/lib/ai/pre-call-gate";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
-import { DETAILS_PROMPT } from "@/lib/ai/prompts/details";
+import { DETAILS_PROMPT, DOCUMENT_DETAILS_PROMPT } from "@/lib/ai/prompts/details";
 import { requireAuth } from "@/lib/api/auth";
 import { createTimeoutController } from "@/lib/api/abort";
 import { withErrorHandling } from "@/lib/api/error";
@@ -98,14 +98,24 @@ export async function POST(request: NextRequest) {
       const { signal, cleanup } = createTimeoutController(300_000);
 
       try {
-        // Get current structure and page contents
-        const { data: structureData } = await supabase
-          .from("structures")
-          .select("id, pages")
-          .eq("project_id", projectId)
-          .order("version", { ascending: false })
-          .limit(1)
-          .single();
+        // Get current structure and page contents + output_type
+        const [{ data: structureData }, { data: projectData }] =
+          await Promise.all([
+            supabase
+              .from("structures")
+              .select("id, pages")
+              .eq("project_id", projectId)
+              .order("version", { ascending: false })
+              .limit(1)
+              .single(),
+            supabase
+              .from("projects")
+              .select("output_type")
+              .eq("id", projectId)
+              .single(),
+          ]);
+
+        const outputType = projectData?.output_type || "slide";
 
         if (!structureData) {
           return NextResponse.json(
@@ -209,7 +219,7 @@ JSONのみ出力し、説明文は不要です。
 
         const { text, usage } = await generateText({
           model: sonnet,
-          system: DETAILS_PROMPT,
+          system: outputType === "document" ? DOCUMENT_DETAILS_PROMPT : DETAILS_PROMPT,
           prompt,
           maxOutputTokens: 16384,
           abortSignal: signal,

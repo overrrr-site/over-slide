@@ -80,7 +80,7 @@ export default function ContentReviewPage() {
           .eq("project_id", projectId)
           .order("version", { ascending: false })
           .limit(1)
-          .single(),
+          .maybeSingle(),
       ]);
 
       if (reviewResult.data?.review_data) {
@@ -130,7 +130,7 @@ export default function ContentReviewPage() {
         .eq("project_id", projectId)
         .order("version", { ascending: false })
         .limit(1)
-        .single(),
+        .maybeSingle(),
     ]);
 
     let pageContents: unknown[] = [];

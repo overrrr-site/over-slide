@@ -17,7 +17,7 @@ export default function QuotePrintPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/quotes/${quoteId}`)
+    fetch(`/api/quotes/${quoteId}`, { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         setQuote(data.quote);

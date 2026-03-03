@@ -121,7 +121,7 @@ export function QuoteForm({
   }, [state.notes, state.projectTypes]);
 
   // 保存処理
-  const handleSave = async () => {
+  const saveQuote = useCallback(async (): Promise<string | null> => {
     dispatch({ type: "SET_SAVING", saving: true });
 
     const payload = {
@@ -163,7 +163,7 @@ export function QuoteForm({
         const err = await res.json();
         alert(`保存に失敗しました: ${err.error}`);
         dispatch({ type: "SET_SAVING", saving: false });
-        return;
+        return null;
       }
 
       const data = await res.json();
@@ -173,11 +173,44 @@ export function QuoteForm({
       if (!quoteId && data.id) {
         router.replace(`/quotes/${data.id}`);
       }
+      return data.id ?? quoteId ?? null;
     } catch {
       alert("保存に失敗しました");
       dispatch({ type: "SET_SAVING", saving: false });
+      return null;
     }
-  };
+  }, [
+    quoteId,
+    router,
+    state.assignedSales,
+    state.clientName,
+    state.expiresAt,
+    state.issuedAt,
+    state.items,
+    state.notes,
+    state.orientSheetMarkdown,
+    state.originBrainstormId,
+    state.projectName,
+    state.projectTypes,
+    state.quoteNumber,
+    state.status,
+    summary.subtotal,
+    summary.tax,
+    summary.total,
+  ]);
+
+  const handleSave = useCallback(async () => {
+    await saveQuote();
+  }, [saveQuote]);
+
+  const handlePdfOutput = useCallback(async () => {
+    if (!quoteId || state.saving) return;
+    if (state.isDirty) {
+      const savedId = await saveQuote();
+      if (!savedId) return;
+    }
+    window.open(`/quotes/${quoteId}/print`, "_blank", "noopener,noreferrer");
+  }, [quoteId, saveQuote, state.isDirty, state.saving]);
 
   return (
     <div className="h-full overflow-y-auto">
@@ -198,10 +231,15 @@ export function QuoteForm({
             {quoteId && (
               <button
                 type="button"
-                onClick={() => window.open(`/quotes/${quoteId}/print`, "_blank")}
-                className="rounded-md border border-beige px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-off-white"
+                onClick={handlePdfOutput}
+                disabled={state.saving}
+                className="rounded-md border border-beige px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-off-white disabled:opacity-50"
               >
-                PDF出力
+                {state.saving
+                  ? "保存中..."
+                  : state.isDirty
+                    ? "保存してPDF出力"
+                    : "PDF出力"}
               </button>
             )}
             <button

@@ -213,11 +213,29 @@
     display: none !important;
   }
 
+  /* アプリレイアウトの固定高さ・スクロールを解除して全量を印刷する */
+  aside {
+    display: none !important;
+  }
+
+  .h-screen,
+  .h-full {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .overflow-y-auto,
+  .overflow-auto,
+  .overflow-hidden {
+    overflow: visible !important;
+  }
+
   body {
     margin: 0;
     padding: 0;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    background: white;
   }
 
   .print-page {
@@ -227,14 +245,14 @@
 
   .print-content {
     max-width: none;
-    padding: 20mm 15mm;
+    padding: 0;
     box-shadow: none;
   }
 
-  /* ページ設定 */
+  /* A4固定 + 各ページ共通の上下バッファ */
   @page {
     size: A4;
-    margin: 0;
+    margin: 14mm 12mm 16mm 12mm;
   }
 
   /* テーブルのヘッダー色を印刷でも出す */
@@ -250,5 +268,32 @@
   .print-total-box {
     background: #F9F7F4 !important;
     border: 1px solid #E8D5C4 !important;
+  }
+
+  /* 明細が複数ページに跨るようにする */
+  .print-table {
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  .print-table thead {
+    display: table-header-group;
+  }
+
+  .print-table tfoot {
+    display: table-footer-group;
+  }
+
+  .print-table tr,
+  .print-table th,
+  .print-table td {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .print-summary,
+  .print-notes {
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 }

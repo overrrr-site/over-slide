@@ -66,7 +66,7 @@ export async function POST(request: Request) {
             .eq("project_id", projectId)
             .order("version", { ascending: false })
             .limit(1)
-            .single(),
+            .maybeSingle(),
         ]);
 
         if (projectResult.data?.output_type) {

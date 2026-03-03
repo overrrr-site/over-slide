@@ -271,7 +271,7 @@ export default function StructurePage() {
           .eq("project_id", projectId)
           .order("version", { ascending: false })
           .limit(1)
-          .single(),
+          .maybeSingle(),
         supabase
           .from("projects")
           .select("output_type")
@@ -295,7 +295,7 @@ export default function StructurePage() {
         .eq("project_id", projectId)
         .order("version", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
       if (structIdData) setStructureId(structIdData.id);
     };
     load();

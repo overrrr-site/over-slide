@@ -88,7 +88,7 @@ export default function ReviewPage() {
         .eq("project_id", projectId)
         .order("version", { ascending: false })
         .limit(1)
-        .single(),
+        .maybeSingle(),
     ]);
 
     let pageContents: unknown[] = [];

@@ -182,7 +182,17 @@ export const DOCUMENT_STRUCTURE_PROMPT = `<role>
 2. message必須: 各セクションに message フィールドを含める。「このセクションで伝えること」を30字以内の断定文で書く。
 3. 階層構造: CHAPTER→SECTION→SUBSECTIONの順を守る。CHAPTERの連続は禁止。SUBSECTIONの連続は2つまで。
 4. セクション数: 全体は15〜30セクション（章5つ前後 × 節3-5つ）。ストーリーライン: 課題提起→解決策→具体的な提案→実行計画→効果・根拠→まとめ。
-5. content_format: 数値比較はtable、KPIはkpi、段落+表はmixed、それ以外はprose。リサーチメモのデータを活用できるセクションを必ず含める。
+5. content_format を厳密に選ぶ。以下に該当するなら必ず table または mixed にする:
+   - 予算・費用・見積もり → table
+   - スケジュール・工程・タイムライン → table
+   - 比較（製品比較、現状vs提案、前後比較） → table
+   - 仕様・要件・条件の一覧 → table
+   - 評価基準・指標・KPI → mixed（本文で解説 + 表で数値）
+   - 成果物・納品物の一覧 → table
+   - 役割・担当・体制 → table
+   - 上記に該当しない説明・論証 → prose
+   全SECTIONのうち40%以上を table または mixed にすること。リサーチメモのデータを活用できるセクションを必ず含める。
+6. エグゼクティブサマリー: COVERの直後・最初のCHAPTERの前にSECTION（content_format: prose）を1つ配置する。タイトルは「概要」とし、文書全体の要点を3-5文で凝縮する。読み手が概要だけで提案の核心を把握できるようにする。
 </rules>
 
 <tone>
@@ -243,6 +253,15 @@ JSONのみ出力。
     },
     {
       "page_number": 2,
+      "master_type": "SECTION",
+      "title": "概要",
+      "purpose": "忙しい読み手が全体像を把握できるようにする",
+      "key_content": "課題（業務時間の42%が手作業）、提案（RPA導入で80%自動化）、効果（年間1,200時間削減、8ヶ月で投資回収）",
+      "content_format": "prose",
+      "message": "手作業の自動化で年間1,200時間を削減し8ヶ月で投資を回収する"
+    },
+    {
+      "page_number": 3,
       "master_type": "CHAPTER",
       "title": "1. 現状の課題",
       "purpose": "課題パートの導入",
@@ -251,7 +270,7 @@ JSONのみ出力。
       "message": "営業部の業務負担が限界に達している"
     },
     {
-      "page_number": 3,
+      "page_number": 4,
       "master_type": "SECTION",
       "title": "1.1 業務時間の実態調査",
       "purpose": "調査結果を数値で示す",
@@ -260,7 +279,7 @@ JSONのみ出力。
       "message": "業務時間の42%が転記・集計の手作業に費やされている"
     },
     {
-      "page_number": 4,
+      "page_number": 5,
       "master_type": "SECTION",
       "title": "1.2 手作業が引き起こす問題",
       "purpose": "手作業→ミス→修正→残業の因果関係を説明",
@@ -269,7 +288,7 @@ JSONのみ出力。
       "message": "手作業がミスを生み、修正がさらに時間を奪っている"
     },
     {
-      "page_number": 5,
+      "page_number": 6,
       "master_type": "CHAPTER",
       "title": "2. 提案内容",
       "purpose": "解決策パートの導入",
@@ -278,7 +297,7 @@ JSONのみ出力。
       "message": "RPAで転記・集計を自動化する"
     },
     {
-      "page_number": 6,
+      "page_number": 7,
       "master_type": "SECTION",
       "title": "2.1 自動化の対象と範囲",
       "purpose": "何を自動化するかを具体的に説明",
@@ -287,21 +306,31 @@ JSONのみ出力。
       "message": "転記・集計・請求処理の3業務をRPAで自動化する"
     },
     {
-      "page_number": 7,
+      "page_number": 8,
       "master_type": "SECTION",
       "title": "2.2 導入前後の変化",
       "purpose": "現状と導入後を比較して効果を可視化",
       "key_content": "業務別の工数比較表。転記980→0時間、集計720→120時間、修正316→80時間",
       "content_format": "table",
       "message": "自動化により月間1,800時間を200時間に削減する"
+    },
+    {
+      "page_number": 9,
+      "master_type": "SECTION",
+      "title": "2.3 ロールアウト計画",
+      "purpose": "導入スケジュールをフェーズ別に整理する",
+      "key_content": "3段階のロールアウト。Phase1受注転記、Phase2レポート、Phase3請求処理。各フェーズの期間・対象・目標",
+      "content_format": "table",
+      "message": "3段階に分けてリスクを抑えて導入する"
     }
   ]
 }
 </output>
 <why_this_is_good>
+- 概要セクションがCOVER直後にあり、忙しい読み手でも全体像を把握できる
 - 章番号付きの見出しで文書としての読みやすさを確保
 - messageが全て断定文で、後工程で展開しやすい
-- content_format が適切に使い分けられている（prose, mixed, table）
+- content_format が適切に使い分けられている（prose, mixed, table）。SECTIONの半数以上が table/mixed で構造化データを含む
 - タイトルが自然な日本語で、横文字や大袈裟な表現がない
 </why_this_is_good>
 </example>
