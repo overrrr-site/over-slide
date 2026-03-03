@@ -558,15 +558,24 @@ export default function DesignPage() {
     }
   };
 
-  // Complete design and move to review
+  // Complete design and move to review (or finish for documents)
   const completeDesign = async () => {
     const supabase = createClient();
-    await supabase
-      .from("projects")
-      .update({ current_step: 6 })
-      .eq("id", projectId);
 
-    router.push(`/projects/${projectId}/design-review`);
+    if (outputType === "document") {
+      // ドキュメントはステップ5で完了（最終レビュー不要）
+      await supabase
+        .from("projects")
+        .update({ current_step: 7, status: "completed" })
+        .eq("id", projectId);
+      router.push("/dashboard");
+    } else {
+      await supabase
+        .from("projects")
+        .update({ current_step: 6 })
+        .eq("id", projectId);
+      router.push(`/projects/${projectId}/design-review`);
+    }
   };
 
   // Memoize iframe srcDoc for each slide
@@ -628,7 +637,7 @@ export default function DesignPage() {
               disabled={outputType === "slide" && slides.length === 0}
               className="rounded-md bg-green px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green/90 disabled:opacity-50"
             >
-              {outputType === "document" ? "完了 → 最終レビューへ" : "デザイン完了 → 最終レビューへ"}
+              {outputType === "document" ? "文書作成を完了" : "デザイン完了 → 最終レビューへ"}
             </button>
           </div>
         </div>

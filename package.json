@@ -1,26 +1,53 @@
 {
-  "name": "tmpsetup",
+  "name": "over-slide",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "NODE_OPTIONS='--max-old-space-size=8192' next dev --turbopack 2>&1 | tee /tmp/next-dev.log",
+    "dev:light": "NODE_OPTIONS='--max-old-space-size=4096' next dev --webpack 2>&1 | tee /tmp/next-dev.log",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:seed": "npx tsx supabase/seed/seed_reviewer_profile.ts",
+    "research:normalize-keywords:dry": "node scripts/normalize-research-keywords.mjs",
+    "research:normalize-keywords": "node scripts/normalize-research-keywords.mjs --apply"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.47",
+    "@ai-sdk/google": "^3.0.31",
+    "@ai-sdk/openai": "^3.0.34",
+    "@ai-sdk/react": "^3.0.103",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@iconify-json/mdi": "^1.2.3",
+    "@iconify/react": "^6.0.2",
+    "@iconify/utils": "^3.1.0",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.97.0",
+    "ai": "^6.0.99",
+    "docx": "^9.6.0",
     "next": "16.1.6",
+    "officeparser": "^6.0.4",
+    "pdf-parse": "^2.4.5",
+    "pptxgenjs": "^4.0.1",
+    "puppeteer": "^24.37.5",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "sharp": "^0.34.5",
+    "xlsx": "^0.18.5",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.3.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

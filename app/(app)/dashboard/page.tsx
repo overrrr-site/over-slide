@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { WORKFLOW_STEPS } from "@/lib/utils/constants";
+import { getWorkflowSteps } from "@/lib/utils/constants";
 import { QUOTE_STATUSES } from "@/lib/quotes/constants";
 import { formatCurrency } from "@/lib/quotes/calculations";
 import Link from "next/link";
@@ -28,7 +28,12 @@ const STATUS_LABELS: Record<string, string> = {
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [{ data: projects }, { data: quotes }] = await Promise.all([
+  const [{ data: brainstorms }, { data: projects }, { data: quotes }] = await Promise.all([
+    supabase
+      .from("brainstorm_sessions")
+      .select("id, title, client_name, status, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(6),
     supabase
       .from("projects")
       .select("id, title, client_name, status, current_step, output_type, updated_at")
@@ -41,12 +46,13 @@ export default async function DashboardPage() {
       .limit(5),
   ]);
 
-  const stepName = (step: number) => {
-    if (step > WORKFLOW_STEPS[WORKFLOW_STEPS.length - 1].id) return "完了";
-    return WORKFLOW_STEPS.find((s) => s.id === step)?.name || "";
+  const stepName = (step: number, outputType?: string) => {
+    const steps = getWorkflowSteps(outputType);
+    if (step > steps[steps.length - 1].id) return "完了";
+    return steps.find((s) => s.id === step)?.name || "";
   };
 
-  const totalSteps = WORKFLOW_STEPS.length;
+  const totalStepsFor = (outputType?: string) => getWorkflowSteps(outputType).length;
 
   return (
     <div className="mx-auto w-full max-w-6xl overflow-auto p-6">
@@ -54,8 +60,8 @@ export default async function DashboardPage() {
         title="ホーム"
         actions={
           <div className="flex gap-2">
-            <Link href="/projects/new">
-              <Button size="sm">+ 新規プロジェクト</Button>
+            <Link href="/brainstorms/new">
+              <Button size="sm">+ 新規ブレスト</Button>
             </Link>
             <Link href="/quotes/new">
               <Button variant="secondary" size="sm">+ 新規見積</Button>
@@ -64,10 +70,56 @@ export default async function DashboardPage() {
         }
       />
 
-      {/* 最近のプロジェクト */}
+      {/* 最近のブレスト */}
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-navy">最近のプロジェクト</h2>
+          <h2 className="text-sm font-bold text-navy">最近のブレスト</h2>
+          <Link href="/brainstorms" className="text-xs text-text-secondary hover:text-navy transition-colors">
+            すべて見る →
+          </Link>
+        </div>
+
+        {!brainstorms?.length ? (
+          <EmptyState
+            icon="mdi:head-lightbulb-outline"
+            title="ブレストがありません"
+            description="新規ブレストを作成して始めましょう"
+          />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {brainstorms.map((brainstorm) => (
+              <Card key={brainstorm.id} href={`/brainstorms/${brainstorm.id}`} interactive>
+                <CardHeader>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="truncate text-sm font-bold text-navy">
+                      {brainstorm.title}
+                    </h3>
+                    {brainstorm.client_name && (
+                      <p className="mt-0.5 truncate text-xs text-text-secondary">
+                        {brainstorm.client_name}
+                      </p>
+                    )}
+                  </div>
+                  <Badge variant={brainstorm.status === "completed" ? "success" : brainstorm.status === "archived" ? "draft" : "active"}>
+                    {brainstorm.status === "completed" ? "完了" : brainstorm.status === "archived" ? "アーカイブ" : "進行中"}
+                  </Badge>
+                </CardHeader>
+                <CardFooter>
+                  <span>ブリーフ作成</span>
+                  <span>
+                    {new Date(brainstorm.updated_at).toLocaleDateString("ja-JP")}
+                  </span>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* 最近の資料作成 */}
+      <section className="mb-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-navy">最近の資料作成</h2>
           <Link href="/projects" className="text-xs text-text-secondary hover:text-navy transition-colors">
             すべて見る →
           </Link>
@@ -76,8 +128,8 @@ export default async function DashboardPage() {
         {!projects?.length ? (
           <EmptyState
             icon="mdi:file-presentation-box"
-            title="プロジェクトがありません"
-            description="新規プロジェクトを作成して始めましょう"
+            title="資料作成がありません"
+            description="先にブレインストーミングを作成して企画書へ昇格してください"
           />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -99,9 +151,9 @@ export default async function DashboardPage() {
                   </Badge>
                 </CardHeader>
                 <CardContent>
-                  <ProgressBar current={Math.min(project.current_step, totalSteps)} total={totalSteps} />
+                  <ProgressBar current={Math.min(project.current_step, totalStepsFor(project.output_type))} total={totalStepsFor(project.output_type)} />
                   <p className="mt-1.5 text-xs text-text-secondary">
-                    現在: {stepName(project.current_step)}
+                    現在: {stepName(project.current_step, project.output_type)}
                   </p>
                 </CardContent>
                 <CardFooter>

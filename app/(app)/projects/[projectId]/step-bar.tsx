@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@iconify/react";
-import { WORKFLOW_STEPS, DOCUMENT_STEP_NAMES } from "@/lib/utils/constants";
+import { DOCUMENT_STEP_NAMES, getWorkflowSteps } from "@/lib/utils/constants";
 
 interface StepBarProps {
   projectId: string;
@@ -13,8 +13,9 @@ interface StepBarProps {
 
 export function StepBar({ projectId, currentStep, outputType = "slide" }: StepBarProps) {
   const pathname = usePathname();
+  const steps = getWorkflowSteps(outputType);
 
-  const currentPathStep = WORKFLOW_STEPS.find((step) => {
+  const currentPathStep = steps.find((step) => {
     const stepPath = `/projects/${projectId}/${step.path}`;
     return pathname === stepPath || pathname.startsWith(stepPath + "/");
   });
@@ -23,7 +24,7 @@ export function StepBar({ projectId, currentStep, outputType = "slide" }: StepBa
 
   return (
     <div className="mt-3 flex gap-1">
-      {WORKFLOW_STEPS.map((step) => {
+      {steps.map((step) => {
         const isViewing = step.id === activeStepId;
         const isCompleted = step.id < currentStep;
         const stepPath = `/projects/${projectId}/${step.path}`;

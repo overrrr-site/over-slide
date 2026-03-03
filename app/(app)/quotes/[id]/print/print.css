@@ -1,0 +1,254 @@
+/* ============================================================
+   見積書 PDF印刷スタイル
+   ============================================================ */
+
+/* 画面表示用 */
+.print-page {
+  font-family: "Zen Kaku Gothic New", "Montserrat", sans-serif;
+  color: #2A2A2A;
+}
+
+.print-content {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px;
+  background: white;
+}
+
+/* ヘッダー */
+.print-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 3px solid #1A2B4A;
+}
+
+.print-title {
+  font-size: 28px;
+  font-weight: bold;
+  color: #1A2B4A;
+  letter-spacing: 8px;
+}
+
+.print-meta {
+  text-align: right;
+  font-size: 12px;
+  color: #666666;
+  line-height: 1.8;
+}
+
+/* 宛先・発行者 */
+.print-parties {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.print-client {
+  flex: 1;
+}
+
+.print-client-name {
+  font-size: 18px;
+  font-weight: bold;
+  color: #1A2B4A;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #1A2B4A;
+  display: inline-block;
+}
+
+.print-project-name {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #2A2A2A;
+}
+
+.print-project-type {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #666666;
+}
+
+.print-issuer {
+  text-align: right;
+  font-size: 12px;
+  color: #666666;
+  line-height: 1.8;
+}
+
+.print-issuer-name {
+  font-size: 14px;
+  font-weight: bold;
+  color: #1A2B4A;
+}
+
+/* 合計金額ボックス */
+.print-total-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+  background: #F9F7F4;
+  border: 1px solid #E8D5C4;
+  border-radius: 4px;
+}
+
+.print-total-label {
+  font-size: 14px;
+  color: #666666;
+}
+
+.print-total-amount {
+  font-size: 24px;
+  font-weight: bold;
+  color: #1A2B4A;
+}
+
+/* 明細テーブル */
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 24px;
+  font-size: 12px;
+}
+
+.print-th {
+  background: #1A2B4A;
+  color: white;
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.print-td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #E8D5C4;
+}
+
+.print-td-right {
+  text-align: right;
+}
+
+.print-td-center {
+  text-align: center;
+}
+
+.print-category-row {
+  padding: 6px 12px;
+  background: #F9F7F4;
+  font-weight: bold;
+  font-size: 11px;
+  color: #1A2B4A;
+  border-bottom: 1px solid #E8D5C4;
+}
+
+/* 小計・合計 */
+.print-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-bottom: 32px;
+}
+
+.print-summary-row {
+  display: flex;
+  justify-content: space-between;
+  width: 300px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #E8D5C4;
+}
+
+.print-summary-total {
+  font-weight: bold;
+  font-size: 15px;
+  color: #1A2B4A;
+  border-bottom: 2px solid #1A2B4A;
+}
+
+/* 備考 */
+.print-notes {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid #E8D5C4;
+}
+
+.print-notes-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #1A2B4A;
+  margin-bottom: 8px;
+}
+
+.print-notes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.print-notes-list li {
+  font-size: 11px;
+  color: #666666;
+  line-height: 1.8;
+  padding-left: 16px;
+  position: relative;
+}
+
+.print-notes-list li::before {
+  content: "・";
+  position: absolute;
+  left: 0;
+}
+
+/* ============================================================
+   印刷用スタイル
+   ============================================================ */
+@media print {
+  /* 印刷ボタンなどを非表示 */
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-page {
+    margin: 0;
+    padding: 0;
+  }
+
+  .print-content {
+    max-width: none;
+    padding: 20mm 15mm;
+    box-shadow: none;
+  }
+
+  /* ページ設定 */
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  /* テーブルのヘッダー色を印刷でも出す */
+  .print-th {
+    background: #1A2B4A !important;
+    color: white !important;
+  }
+
+  .print-category-row {
+    background: #F9F7F4 !important;
+  }
+
+  .print-total-box {
+    background: #F9F7F4 !important;
+    border: 1px solid #E8D5C4 !important;
+  }
+}

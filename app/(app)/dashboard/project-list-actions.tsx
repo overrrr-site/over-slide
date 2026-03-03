@@ -27,7 +27,7 @@ export function ProjectListActions({ projectId }: { projectId: string }) {
   };
 
   const handleDelete = async () => {
-    if (!confirm("このプロジェクトを削除しますか？")) return;
+    if (!confirm("この資料作成を削除しますか？")) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/projects/${projectId}`, {

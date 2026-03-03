@@ -40,7 +40,7 @@ export default async function ProjectLayout({
           <Breadcrumb
             items={[
               { label: "ホーム", href: "/dashboard" },
-              { label: "プロジェクト", href: "/projects" },
+              { label: "資料作成", href: "/projects" },
               { label: project.title },
             ]}
           />

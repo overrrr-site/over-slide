@@ -30,12 +30,18 @@ const HOME_ITEM: NavItem = {
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    label: "企画書作成",
-    icon: "mdi:file-presentation-box",
+    label: "企画・資料作成",
+    icon: "mdi:lightbulb-on-outline",
     items: [
       {
+        href: "/brainstorms",
+        label: "ブレスト一覧",
+        icon: "mdi:head-lightbulb-outline",
+        iconActive: "mdi:head-lightbulb",
+      },
+      {
         href: "/projects",
-        label: "プロジェクト一覧",
+        label: "資料作成一覧",
         icon: "mdi:folder-multiple-outline",
         iconActive: "mdi:folder-multiple",
       },
@@ -54,7 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "見積管理",
+    label: "見積作成",
     icon: "mdi:calculator-variant-outline",
     items: [
       {

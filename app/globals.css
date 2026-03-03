@@ -1,26 +1,53 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-navy: #1A2B4A;
+  --color-green: #6B8E7F;
+  --color-beige: #E8D5C4;
+  --color-off-white: #F9F7F4;
+  --color-text-primary: #2A2A2A;
+  --color-text-secondary: #666666;
+
+  /* ステータス色 */
+  --color-status-draft-bg: #F3F4F6;
+  --color-status-draft-text: #4B5563;
+  --color-status-active-bg: #DBEAFE;
+  --color-status-active-text: #1D4ED8;
+  --color-status-warning-bg: #FEF3C7;
+  --color-status-warning-text: #B45309;
+  --color-status-success-bg: rgba(107, 142, 127, 0.15);
+  --color-status-success-text: #6B8E7F;
+  --color-status-error-bg: #FEE2E2;
+  --color-status-error-text: #DC2626;
+
+  --background: var(--color-off-white);
+  --foreground: var(--color-text-primary);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-navy: var(--color-navy);
+  --color-green: var(--color-green);
+  --color-beige: var(--color-beige);
+  --color-off-white: var(--color-off-white);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-status-draft-bg: var(--color-status-draft-bg);
+  --color-status-draft-text: var(--color-status-draft-text);
+  --color-status-active-bg: var(--color-status-active-bg);
+  --color-status-active-text: var(--color-status-active-text);
+  --color-status-warning-bg: var(--color-status-warning-bg);
+  --color-status-warning-text: var(--color-status-warning-text);
+  --color-status-success-bg: var(--color-status-success-bg);
+  --color-status-success-text: var(--color-status-success-text);
+  --color-status-error-bg: var(--color-status-error-bg);
+  --color-status-error-text: var(--color-status-error-text);
+  --font-sans: var(--font-zen-kaku), Arial, sans-serif;
+  --font-en: var(--font-montserrat), Arial, sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

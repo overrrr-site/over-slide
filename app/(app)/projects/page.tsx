@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { WORKFLOW_STEPS } from "@/lib/utils/constants";
+import { getWorkflowSteps } from "@/lib/utils/constants";
 import Link from "next/link";
 import { Icon } from "@iconify/react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ProjectDeleteAction } from "./project-delete-action";
 
 const STATUS_BADGE_MAP: Record<string, "draft" | "active" | "warning" | "success"> = {
   draft: "draft",
@@ -31,24 +32,25 @@ export default async function ProjectsListPage() {
     .select("id, title, client_name, status, current_step, output_type, updated_at")
     .order("updated_at", { ascending: false });
 
-  const stepName = (step: number) => {
-    if (step > WORKFLOW_STEPS[WORKFLOW_STEPS.length - 1].id) return "完了";
-    return WORKFLOW_STEPS.find((s) => s.id === step)?.name || "";
+  const stepName = (step: number, outputType?: string) => {
+    const steps = getWorkflowSteps(outputType);
+    if (step > steps[steps.length - 1].id) return "完了";
+    return steps.find((s) => s.id === step)?.name || "";
   };
 
-  const totalSteps = WORKFLOW_STEPS.length;
+  const totalStepsFor = (outputType?: string) => getWorkflowSteps(outputType).length;
 
   return (
     <div className="mx-auto w-full max-w-6xl overflow-auto p-6">
       <PageHeader
-        title="プロジェクト一覧"
+        title="資料作成一覧"
         breadcrumbs={[
           { label: "ホーム", href: "/dashboard" },
-          { label: "プロジェクト" },
+          { label: "資料作成" },
         ]}
         actions={
-          <Link href="/projects/new">
-            <Button size="sm">+ 新規プロジェクト</Button>
+          <Link href="/brainstorms/new">
+            <Button size="sm">+ 新規ブレスト</Button>
           </Link>
         }
       />
@@ -56,11 +58,11 @@ export default async function ProjectsListPage() {
       {!projects?.length ? (
         <EmptyState
           icon="mdi:file-presentation-box"
-          title="プロジェクトがありません"
-          description="「新規プロジェクト」ボタンからプロジェクトを作成してください"
+          title="資料作成がありません"
+          description="「新規ブレスト」から企画書を作成してください"
           action={
-            <Link href="/projects/new">
-              <Button size="sm">+ 新規プロジェクト</Button>
+            <Link href="/brainstorms/new">
+              <Button size="sm">+ 新規ブレスト</Button>
             </Link>
           }
         />
@@ -84,12 +86,12 @@ export default async function ProjectsListPage() {
                 </Badge>
               </CardHeader>
               <CardContent>
-                <ProgressBar current={Math.min(project.current_step, totalSteps)} total={totalSteps} />
+                <ProgressBar current={Math.min(project.current_step, totalStepsFor(project.output_type))} total={totalStepsFor(project.output_type)} />
                 <p className="mt-1.5 text-xs text-text-secondary">
-                  現在: {stepName(project.current_step)}
+                  現在: {stepName(project.current_step, project.output_type)}
                 </p>
               </CardContent>
-              <CardFooter>
+              <CardFooter className="justify-between">
                 <span className="flex items-center gap-1">
                   <Icon
                     icon={project.output_type === "document" ? "mdi:file-document-outline" : "mdi:presentation"}
@@ -97,8 +99,9 @@ export default async function ProjectsListPage() {
                   />
                   {project.output_type === "document" ? "ドキュメント" : "スライド"}
                 </span>
-                <span>
-                  {new Date(project.updated_at).toLocaleDateString("ja-JP")}
+                <span className="flex items-center gap-2">
+                  <span>{new Date(project.updated_at).toLocaleDateString("ja-JP")}</span>
+                  <ProjectDeleteAction projectId={project.id} />
                 </span>
               </CardFooter>
             </Card>
