@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { QuoteForm } from "../new/page";
+import { QuoteForm } from "../new/quote-form";
 import type { Quote, QuoteItem } from "@/lib/quotes/types";
 
 export default function QuoteEditPage() {
