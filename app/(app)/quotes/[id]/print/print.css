@@ -78,10 +78,35 @@
   line-height: 1.8;
 }
 
+.print-issuer-inner {
+  position: relative;
+  display: inline-block;
+  padding-right: 40px;
+}
+
+/* テキストを印影より手前に表示 */
+.print-issuer-inner > div {
+  position: relative;
+  z-index: 1;
+}
+
 .print-issuer-name {
   font-size: 14px;
   font-weight: bold;
   color: #1A2B4A;
+}
+
+/* 印影（社印） — テキストの背面に重ねる */
+.print-imprint {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 0;
+  opacity: 0.85;
 }
 
 /* 合計金額ボックス */

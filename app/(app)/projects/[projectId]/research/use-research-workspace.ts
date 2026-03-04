@@ -323,15 +323,29 @@ export function useResearchWorkspace() {
     setAutonomousSummary(null);
 
     try {
+      // 最新のメモ・キーワード・検索結果をDBに保存してからAPI呼び出し
+      const currentMemo = (streamingMemoText || memoDraft).trim();
+      if (currentMemo) {
+        const normalizedKw = normalizeKeywordTextToQueries(keywords);
+        const supabase = createClient();
+        await supabase.from("research_memos").upsert(
+          {
+            project_id: projectId,
+            theme_keywords: normalizedKw,
+            search_queries: extractQueriesFromKeywords(normalizedKw),
+            search_results: searchResults,
+            raw_markdown: currentMemo,
+          },
+          { onConflict: "project_id" }
+        );
+      }
+
       const response = await fetch("/api/ai/research/autonomous", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
           briefSheet: briefMarkdown,
-          existingMemo: (streamingMemoText || memoDraft).trim(),
-          keywords,
-          searchResults,
           maxIterations: 3,
         }),
       });

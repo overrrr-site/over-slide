@@ -22,11 +22,12 @@ export default async function AppLayout({
       {/* Sidebar */}
       <aside className="hidden w-56 flex-shrink-0 border-r border-beige bg-white lg:flex lg:flex-col">
         <div className="px-5 py-4">
-          <Link
-            href="/dashboard"
-            className="font-en text-lg font-semibold tracking-tight text-navy"
-          >
-            OVERworks
+          <Link href="/dashboard" className="block">
+            <img
+              src="/logo.png"
+              alt="OVERworks"
+              className="h-7 w-auto"
+            />
           </Link>
         </div>
 

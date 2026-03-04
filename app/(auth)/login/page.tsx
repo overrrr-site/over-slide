@@ -30,9 +30,13 @@ export default function LoginPage() {
 
   return (
     <div className="rounded-lg border border-beige bg-white p-8 shadow-sm">
-      <h1 className="mb-6 text-center font-montserrat text-2xl font-semibold tracking-tight text-navy">
-        OVERworks
-      </h1>
+      <div className="mb-6 flex justify-center">
+        <img
+          src="/logo.png"
+          alt="OVERworks"
+          className="h-10 w-auto"
+        />
+      </div>
       <form onSubmit={handleLogin} className="space-y-4">
         <div>
           <label

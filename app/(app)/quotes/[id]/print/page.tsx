@@ -106,10 +106,20 @@ export default function QuotePrintPage() {
             )}
           </div>
           <div className="print-issuer">
-            <p className="print-issuer-name">{COMPANY_INFO.name}</p>
-            <p>{COMPANY_INFO.zipCode}</p>
-            <p>{COMPANY_INFO.address}</p>
-            <p>TEL: {COMPANY_INFO.tel}</p>
+            <div className="print-issuer-inner">
+              <div>
+                <p className="print-issuer-name">{COMPANY_INFO.name}</p>
+                <p>{COMPANY_INFO.zipCode}</p>
+                <p>{COMPANY_INFO.address}</p>
+                <p>TEL: {COMPANY_INFO.tel}</p>
+              </div>
+              {/* 印影 */}
+              <img
+                src="/imprint.png"
+                alt="印影"
+                className="print-imprint"
+              />
+            </div>
           </div>
         </div>
 

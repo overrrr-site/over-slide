@@ -23,35 +23,17 @@ import { normalizeKeywordTextToQueries } from "@/lib/research/topic-queries";
 import {
   buildResearchPromptContext,
   type PromptContextLimits,
-  type PromptFileTextInput,
   type PromptSearchResultInput,
 } from "@/lib/research/prompt-context";
 import { fetchResearchKnowledgeContext } from "@/lib/research/knowledge-context";
+
+export const maxDuration = 120;
 
 const TAVILY_API_URL = "https://api.tavily.com/search";
 
 const requestSchema = z.object({
   projectId: z.string().min(1, "projectId is required"),
   briefSheet: z.string().optional(),
-  existingMemo: z.string().optional(),
-  keywords: z.string().optional(),
-  searchResults: z
-    .array(
-      z.object({
-        title: z.string().optional(),
-        url: z.string().optional(),
-        content: z.string().optional(),
-      })
-    )
-    .optional(),
-  fileTexts: z
-    .array(
-      z.object({
-        name: z.string().optional(),
-        text: z.string().optional(),
-      })
-    )
-    .optional(),
   maxIterations: z.number().int().min(1).max(3).optional(),
 });
 
@@ -130,21 +112,17 @@ export async function POST(request: Request) {
         .eq("project_id", payload.projectId)
         .single();
 
-      let memoText =
-        sanitizeText(payload.existingMemo) ||
-        sanitizeText(existingMemoRecord?.raw_markdown);
+      let memoText = sanitizeText(existingMemoRecord?.raw_markdown);
 
-      let keywordsText =
-        normalizeKeywordTextToQueries(sanitizeText(payload.keywords)) ||
-        normalizeKeywordTextToQueries(sanitizeText(existingMemoRecord?.theme_keywords));
+      let keywordsText = normalizeKeywordTextToQueries(
+        sanitizeText(existingMemoRecord?.theme_keywords)
+      );
 
-      let searchResults = dedupeSearchResults([
-        ...((payload.searchResults || []) as PromptSearchResultInput[]),
-        ...(((existingMemoRecord?.search_results as PromptSearchResultInput[]) ||
-          []) as PromptSearchResultInput[]),
-      ]);
+      let searchResults = dedupeSearchResults(
+        ((existingMemoRecord?.search_results as PromptSearchResultInput[]) ||
+          [])
+      );
 
-      const fileTexts = (payload.fileTexts || []) as PromptFileTextInput[];
       const briefSheetText = sanitizeText(payload.briefSheet);
 
       const iterationLogs: Array<{
@@ -186,7 +164,7 @@ export async function POST(request: Request) {
           instruction: iterationInstruction,
           keywords: keywordsText,
           searchResults,
-          fileTexts,
+          fileTexts: [],
           limits: AUTONOMOUS_CONTEXT_LIMITS,
         });
         const promptContextWithKnowledge = knowledge.context
