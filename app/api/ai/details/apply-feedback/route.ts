@@ -13,12 +13,17 @@ import { DETAILS_PROMPT, DOCUMENT_DETAILS_PROMPT } from "@/lib/ai/prompts/detail
 import { requireAuth } from "@/lib/api/auth";
 import { createTimeoutController } from "@/lib/api/abort";
 import { withErrorHandling } from "@/lib/api/error";
+import { chunkArray } from "@/lib/utils/array";
 
 interface FeedbackItem {
   target_page?: number;
   description: string;
   suggestion?: string;
 }
+
+type PageContent = { page_number: number; [key: string]: unknown };
+
+const BATCH_SIZE = 4;
 
 /**
  * Clean common JSON issues from AI output.
@@ -79,6 +84,93 @@ function robustJsonParse(raw: string): unknown {
     const errMsg = e instanceof Error ? e.message : String(e);
     throw new Error(`AIの応答JSONの解析に失敗しました: ${errMsg}`);
   }
+}
+
+type LogContext = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any;
+  userId: string;
+  projectId: string;
+  feedbackCount: number;
+};
+
+/**
+ * Process a batch of affected pages with feedback items.
+ */
+async function processFeedbackBatch(
+  batchPages: PageContent[],
+  feedbackText: string,
+  systemPrompt: string,
+  signal: AbortSignal,
+  logContext: LogContext
+): Promise<NumberedPatch[]> {
+  const pageNums = batchPages.map((p) => `P${p.page_number}`).join(", ");
+  const prompt = `## 改善対象のページコンテンツ（${batchPages.length}ページ分）
+${compactJsonForPrompt(batchPages)}
+
+## レビューフィードバック（採用済み指摘）
+${feedbackText}
+
+上記のレビューフィードバックを反映し、対象ページ ${pageNums} に必要な変更のみ差分として返してください。
+変更不要ページは出力しないでください。
+各差分は page_number と changes を含め、changes には変更するフィールドのみを入れてください。
+page_number は変更しないでください。
+JSONのみ出力し、説明文は不要です。
+
+出力形式:
+{
+  "patches": [
+    {
+      "page_number": 1,
+      "changes": {
+        "title": "...",
+        "body": "...",
+        "bullets": [...]
+      }
+    },
+    ...
+  ]
+}`;
+
+  const { text, usage } = await generateText({
+    model: sonnet,
+    system: systemPrompt,
+    prompt,
+    maxOutputTokens: 16384,
+    abortSignal: signal,
+  });
+
+  await recordAiUsage({
+    supabase: logContext.supabase,
+    endpoint: "/api/ai/details/apply-feedback",
+    operation: "generateText",
+    model: "claude-sonnet-4-5-20250929",
+    userId: logContext.userId,
+    projectId: logContext.projectId,
+    promptChars: prompt.length,
+    completionChars: text.length,
+    usage,
+    metadata: {
+      pageNumbers: pageNums,
+      feedbackItems: logContext.feedbackCount,
+      patchMode: true,
+    },
+  });
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error(`バッチ ${pageNums} のJSON抽出に失敗`);
+  }
+
+  const parsed = robustJsonParse(jsonMatch[0]) as {
+    patches?: NumberedPatch[];
+  };
+
+  if (!parsed.patches || !Array.isArray(parsed.patches)) {
+    throw new Error(`バッチ ${pageNums} の差分配列が不正`);
+  }
+
+  return parsed.patches;
 }
 
 export async function POST(request: NextRequest) {
@@ -185,85 +277,34 @@ export async function POST(request: NextRequest) {
           )
           .join("\n");
 
+        const systemPrompt =
+          outputType === "document" ? DOCUMENT_DETAILS_PROMPT : DETAILS_PROMPT;
+
+        // Batch strategy: 4 pages per batch, run in parallel
+        const batches = chunkArray(affectedPages as PageContent[], BATCH_SIZE);
+
         console.log(
-          `[apply-feedback] Processing ${affectedPages.length}/${currentPages.length} pages for project ${projectId}`
+          `[apply-feedback] Processing ${affectedPages.length}/${currentPages.length} pages in ${batches.length} batches for project ${projectId}`
         );
 
-        // Only regenerate affected pages
-        const prompt = `## 改善対象のページコンテンツ（${affectedPages.length}ページ分）
-${compactJsonForPrompt(affectedPages)}
+        const batchResults = await Promise.all(
+          batches.map((batch) =>
+            processFeedbackBatch(batch, feedbackText, systemPrompt, signal, {
+              supabase,
+              userId: user.id,
+              projectId,
+              feedbackCount: feedbackItems.length,
+            })
+          )
+        );
 
-## レビューフィードバック（採用済み指摘）
-${feedbackText}
-
-上記のレビューフィードバックを反映し、該当ページに必要な変更のみ差分として返してください。
-変更不要ページは出力しないでください。
-各差分は page_number と changes を含め、changes には変更するフィールドのみを入れてください。
-page_number は変更しないでください。
-JSONのみ出力し、説明文は不要です。
-
-出力形式:
-{
-  "patches": [
-    {
-      "page_number": 1,
-      "changes": {
-        "title": "...",
-        "body": "...",
-        "bullets": [...]
-      }
-    },
-    ...
-  ]
-}`;
-
-        const { text, usage } = await generateText({
-          model: sonnet,
-          system: outputType === "document" ? DOCUMENT_DETAILS_PROMPT : DETAILS_PROMPT,
-          prompt,
-          maxOutputTokens: 16384,
-          abortSignal: signal,
-        });
-
-        await recordAiUsage({
-          supabase,
-          endpoint: "/api/ai/details/apply-feedback",
-          operation: "generateText",
-          model: "claude-sonnet-4-5-20250929",
-          userId: user.id,
-          projectId,
-          promptChars: prompt.length,
-          completionChars: text.length,
-          usage,
-          metadata: {
-            affectedPages: affectedPages.length,
-            feedbackItems: feedbackItems.length,
-            patchMode: true,
-          },
-        });
-
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          return NextResponse.json(
-            { error: "AIの応答からJSONを抽出できませんでした" },
-            { status: 500 }
-          );
-        }
-
-        const parsed = robustJsonParse(jsonMatch[0]) as {
-          patches?: NumberedPatch[];
-        };
-
-        if (!parsed.patches || !Array.isArray(parsed.patches)) {
-          return NextResponse.json(
-            { error: "AIの応答形式が不正です（patchesが見つかりません）" },
-            { status: 500 }
-          );
-        }
-
-        const mergedPages = patchByPageNumber(currentPages, parsed.patches);
+        const allPatches = batchResults.flat();
+        const mergedPages = patchByPageNumber(
+          currentPages as PageContent[],
+          allPatches
+        );
         const changedPageNumbers = new Set(
-          parsed.patches
+          allPatches
             .map((patch) =>
               typeof patch.page_number === "number" ? patch.page_number : null
             )
@@ -293,7 +334,7 @@ JSONのみ出力し、説明文は不要です。
         }
 
         console.log(
-          `[apply-feedback] Updated ${changedPageNumbers.size} pages for project ${projectId}`
+          `[apply-feedback] Updated ${changedPageNumbers.size} pages (${batches.length} batches) for project ${projectId}`
         );
 
         return NextResponse.json({ pages: mergedPages });
