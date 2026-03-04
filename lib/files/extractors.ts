@@ -3,6 +3,97 @@
  * Supports: PDF, Office docs, spreadsheets, text files, image files
  */
 
+function ensurePdfJsNodePolyfills(): void {
+  const g = globalThis as Record<string, unknown>;
+
+  if (typeof g.DOMMatrix === "undefined") {
+    class DOMMatrixPolyfill {
+      a = 1;
+      b = 0;
+      c = 0;
+      d = 1;
+      e = 0;
+      f = 0;
+
+      constructor() {}
+
+      multiplySelf(): this {
+        return this;
+      }
+
+      preMultiplySelf(): this {
+        return this;
+      }
+
+      translateSelf(): this {
+        return this;
+      }
+
+      scaleSelf(): this {
+        return this;
+      }
+
+      rotateSelf(): this {
+        return this;
+      }
+
+      invertSelf(): this {
+        return this;
+      }
+
+      clone(): DOMMatrixPolyfill {
+        return new DOMMatrixPolyfill();
+      }
+
+      transformPoint(point?: { x?: number; y?: number; z?: number; w?: number }) {
+        return {
+          x: point?.x ?? 0,
+          y: point?.y ?? 0,
+          z: point?.z ?? 0,
+          w: point?.w ?? 1,
+        };
+      }
+
+      static fromMatrix(): DOMMatrixPolyfill {
+        return new DOMMatrixPolyfill();
+      }
+    }
+
+    g.DOMMatrix = DOMMatrixPolyfill;
+  }
+
+  if (typeof g.Path2D === "undefined") {
+    class Path2DPolyfill {
+      addPath(): void {}
+    }
+
+    g.Path2D = Path2DPolyfill;
+  }
+
+  if (typeof g.ImageData === "undefined") {
+    class ImageDataPolyfill {
+      data: Uint8ClampedArray;
+      width: number;
+      height: number;
+
+      constructor(dataOrWidth: Uint8ClampedArray | number, width?: number, height?: number) {
+        if (typeof dataOrWidth === "number") {
+          this.width = dataOrWidth;
+          this.height = typeof width === "number" ? width : 0;
+          this.data = new Uint8ClampedArray(this.width * this.height * 4);
+          return;
+        }
+
+        this.data = dataOrWidth;
+        this.width = typeof width === "number" ? width : 0;
+        this.height = typeof height === "number" ? height : 0;
+      }
+    }
+
+    g.ImageData = ImageDataPolyfill;
+  }
+}
+
 export async function extractText(
   buffer: Buffer,
   fileName: string
@@ -91,6 +182,7 @@ async function extractPdfWithWorker(buffer: Buffer): Promise<string> {
 }
 
 async function extractPdfWithPdfParse(buffer: Buffer): Promise<string> {
+  ensurePdfJsNodePolyfills();
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
 
@@ -107,6 +199,7 @@ async function extractPdfWithPdfParse(buffer: Buffer): Promise<string> {
 }
 
 async function extractPdfInProcess(buffer: Buffer): Promise<string> {
+  ensurePdfJsNodePolyfills();
   const path = await import("path");
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
