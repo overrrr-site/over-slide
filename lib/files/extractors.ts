@@ -94,27 +94,46 @@ function ensurePdfJsNodePolyfills(): void {
   }
 }
 
+function sanitizeExtractedText(text: string): string {
+  if (!text) return "";
+
+  // Replace lone surrogates with the replacement character when supported.
+  if (typeof text.toWellFormed === "function") {
+    text = text.toWellFormed();
+  }
+
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\u0000/g, "")
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ");
+}
+
 export async function extractText(
   buffer: Buffer,
   fileName: string
 ): Promise<string> {
   const ext = fileName.split(".").pop()?.toLowerCase();
+  let rawText = "";
 
   switch (ext) {
     case "pdf":
-      return extractPdf(buffer);
+      rawText = await extractPdf(buffer);
+      break;
     case "ppt":
     case "pptx":
     case "doc":
     case "docx":
-      return extractOffice(buffer);
+      rawText = await extractOffice(buffer);
+      break;
     case "xls":
     case "xlsx":
-      return extractExcel(buffer);
+      rawText = await extractExcel(buffer);
+      break;
     case "csv":
     case "txt":
     case "md":
-      return buffer.toString("utf-8");
+      rawText = buffer.toString("utf-8");
+      break;
     case "png":
     case "jpg":
     case "jpeg":
@@ -123,10 +142,13 @@ export async function extractText(
     case "bmp":
     case "heic":
     case "heif":
-      return "";
+      rawText = "";
+      break;
     default:
       throw new Error(`Unsupported file type: ${ext}`);
   }
+
+  return sanitizeExtractedText(rawText);
 }
 
 async function extractPdf(buffer: Buffer): Promise<string> {
