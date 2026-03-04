@@ -1,6 +1,6 @@
 /**
  * Text extraction from uploaded files.
- * Supports: PDF, PPTX, XLSX, CSV, TXT
+ * Supports: PDF, Office docs, spreadsheets, text files, image files
  */
 
 export async function extractText(
@@ -12,21 +12,44 @@ export async function extractText(
   switch (ext) {
     case "pdf":
       return extractPdf(buffer);
+    case "ppt":
     case "pptx":
+    case "doc":
     case "docx":
       return extractOffice(buffer);
+    case "xls":
     case "xlsx":
       return extractExcel(buffer);
     case "csv":
     case "txt":
     case "md":
       return buffer.toString("utf-8");
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "gif":
+    case "webp":
+    case "bmp":
+    case "heic":
+    case "heif":
+      return "";
     default:
       throw new Error(`Unsupported file type: ${ext}`);
   }
 }
 
 async function extractPdf(buffer: Buffer): Promise<string> {
+  try {
+    return await extractPdfWithWorker(buffer);
+  } catch (workerError) {
+    console.warn("[extractPdf] Worker extraction failed. Falling back to pdf-parse.", {
+      error: workerError instanceof Error ? workerError.message : String(workerError),
+    });
+    return extractPdfWithPdfParse(buffer);
+  }
+}
+
+async function extractPdfWithWorker(buffer: Buffer): Promise<string> {
   // PDF抽出を別プロセスで実行（メインサーバーのメモリを保護）
   const { execFileSync } = await import("child_process");
   const { writeFileSync, readFileSync, unlinkSync } = await import("fs");
@@ -55,6 +78,22 @@ async function extractPdf(buffer: Buffer): Promise<string> {
     // 一時ファイルを削除
     try { unlinkSync(tmpIn); } catch { /* ignore */ }
     try { unlinkSync(tmpOut); } catch { /* ignore */ }
+  }
+}
+
+async function extractPdfWithPdfParse(buffer: Buffer): Promise<string> {
+  const { PDFParse } = await import("pdf-parse");
+  const parser = new PDFParse({ data: buffer });
+
+  try {
+    const result = await parser.getText();
+    return result.text || "";
+  } finally {
+    try {
+      await parser.destroy();
+    } catch {
+      // ignore cleanup errors
+    }
   }
 }
 

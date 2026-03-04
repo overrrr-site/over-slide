@@ -1,11 +1,22 @@
 const DOCUMENT_TYPE_MAP: Record<string, string> = {
   pdf: "pdf",
+  ppt: "ppt",
   pptx: "pptx",
+  doc: "doc",
   docx: "docx",
+  xls: "xls",
   xlsx: "xlsx",
   csv: "csv",
   txt: "text",
   md: "text",
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  webp: "image",
+  bmp: "image",
+  heic: "image",
+  heif: "image",
 };
 
 export function getLowercaseExtension(fileName: string): string {

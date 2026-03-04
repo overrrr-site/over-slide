@@ -8,7 +8,7 @@ import { MarkdownText } from "./markdown-text";
 import { stripMarkers } from "../hooks/use-discussion-mode";
 
 const ACCEPTED_FILE_TYPES =
-  ".pdf,.pptx,.docx,.xlsx,.csv,.txt,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain";
+  ".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.png,.jpg,.jpeg,.gif,.webp,.bmp,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,image/*";
 
 interface UploadedFileItem {
   id: string;
@@ -24,6 +24,8 @@ interface SingleChatSectionProps {
   messagesEndRef: RefObject<HTMLDivElement | null>;
   uploadedFiles: UploadedFileItem[];
   uploading: boolean;
+  uploadError: string | null;
+  uploadWarning: string | null;
   onInputChange: (value: string) => void;
   onSend: (e?: FormEvent) => void;
   onFileUpload: (file: File) => void;
@@ -43,6 +45,8 @@ export function SingleChatSection({
   messagesEndRef,
   uploadedFiles,
   uploading,
+  uploadError,
+  uploadWarning,
   onInputChange,
   onSend,
   onFileUpload,
@@ -210,6 +214,17 @@ export function SingleChatSection({
             ブリーフとして完了
           </button>
         </div>
+
+        {uploadError && (
+          <p className="mx-auto mt-2 max-w-2xl text-xs text-red-600">
+            {uploadError}
+          </p>
+        )}
+        {uploadWarning && !uploadError && (
+          <p className="mx-auto mt-2 max-w-2xl text-xs text-amber-700">
+            {uploadWarning}
+          </p>
+        )}
       </div>
     </>
   );

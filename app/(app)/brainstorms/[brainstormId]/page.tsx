@@ -51,6 +51,8 @@ export default function BrainstormDetailPage() {
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
 
   const [exports, setExports] = useState<BrainstormExport[]>([]);
@@ -270,6 +272,8 @@ export default function BrainstormDetailPage() {
 
   const handleFileUpload = useCallback(
     async (file: File) => {
+      setUploadError(null);
+      setUploadWarning(null);
       setUploading(true);
       try {
         const formData = new FormData();
@@ -279,9 +283,24 @@ export default function BrainstormDetailPage() {
           method: "POST",
           body: formData,
         });
-        if (!res.ok) return;
-        const result = await res.json();
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setUploadError(
+            typeof result.error === "string"
+              ? result.error
+              : "資料アップロードに失敗しました"
+          );
+          return;
+        }
+
         setUploadedFiles((prev) => [...prev, { id: result.id, file_name: result.fileName }]);
+        if (typeof result.warning === "string" && result.warning) {
+          setUploadWarning(result.warning);
+        }
+      } catch (err) {
+        setUploadError(
+          err instanceof Error ? err.message : "資料アップロードに失敗しました"
+        );
       } finally {
         setUploading(false);
       }
@@ -290,6 +309,7 @@ export default function BrainstormDetailPage() {
   );
 
   const handleFileDelete = useCallback(async (fileId: string) => {
+    setUploadError(null);
     const res = await fetch("/api/brainstorms/upload", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -297,7 +317,15 @@ export default function BrainstormDetailPage() {
     });
     if (res.ok) {
       setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
+      return;
     }
+
+    const result = await res.json().catch(() => ({}));
+    setUploadError(
+      typeof result.error === "string"
+        ? result.error
+        : "資料削除に失敗しました"
+    );
   }, []);
 
   const handleSend = useCallback(
@@ -382,6 +410,8 @@ export default function BrainstormDetailPage() {
             messagesEndRef={messagesEndRef}
             uploadedFiles={uploadedFiles}
             uploading={uploading}
+            uploadError={uploadError}
+            uploadWarning={uploadWarning}
             onInputChange={setInputValue}
             onSend={handleSend}
             onFileUpload={handleFileUpload}

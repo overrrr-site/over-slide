@@ -50,11 +50,16 @@ export async function POST(request: NextRequest) {
   }
 
   let extractedText = "";
+  let extractionWarning: string | null = null;
   try {
     extractedText = await extractText(buffer, file.name);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Text extraction failed";
-    return NextResponse.json({ error: msg }, { status: 400 });
+    extractionWarning =
+      err instanceof Error ? err.message : "Text extraction failed";
+    console.warn("[brainstorms/upload] Text extraction failed:", {
+      fileName: file.name,
+      message: extractionWarning,
+    });
   }
 
   const { data: doc, error: dbError } = await supabase
@@ -67,7 +72,7 @@ export async function POST(request: NextRequest) {
       file_type: inferDocumentType(file.name),
       file_size: file.size,
       storage_path: storagePath,
-      extracted_text: extractedText,
+      extracted_text: extractedText || null,
     })
     .select("id, file_name")
     .single();
@@ -85,6 +90,9 @@ export async function POST(request: NextRequest) {
     id: doc.id,
     fileName: doc.file_name,
     extractedTextLength: extractedText.length,
+    warning: extractionWarning
+      ? `ファイルはアップロードしましたが、本文抽出に失敗しました: ${extractionWarning}`
+      : null,
   });
 }
 
