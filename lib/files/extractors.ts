@@ -42,11 +42,20 @@ async function extractPdf(buffer: Buffer): Promise<string> {
   try {
     return await extractPdfWithWorker(buffer);
   } catch (workerError) {
-    console.warn("[extractPdf] Worker extraction failed. Falling back to pdf-parse.", {
+    console.warn("[extractPdf] Worker extraction failed. Falling back to in-process pdfjs.", {
       error: workerError instanceof Error ? workerError.message : String(workerError),
     });
-    return extractPdfWithPdfParse(buffer);
   }
+
+  try {
+    return await extractPdfInProcess(buffer);
+  } catch (processError) {
+    console.warn("[extractPdf] In-process pdfjs extraction failed. Falling back to pdf-parse.", {
+      error: processError instanceof Error ? processError.message : String(processError),
+    });
+  }
+
+  return extractPdfWithPdfParse(buffer);
 }
 
 async function extractPdfWithWorker(buffer: Buffer): Promise<string> {
@@ -94,6 +103,53 @@ async function extractPdfWithPdfParse(buffer: Buffer): Promise<string> {
     } catch {
       // ignore cleanup errors
     }
+  }
+}
+
+async function extractPdfInProcess(buffer: Buffer): Promise<string> {
+  const path = await import("path");
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+  pdfjsLib.GlobalWorkerOptions.workerSrc = path.resolve(
+    process.cwd(),
+    "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
+  );
+
+  const doc = await pdfjsLib
+    .getDocument({
+      data: new Uint8Array(buffer),
+      useWorkerFetch: false,
+      isEvalSupported: false,
+      useSystemFonts: true,
+      disableFontFace: true,
+    })
+    .promise;
+
+  try {
+    const pages: string[] = [];
+
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      try {
+        const content = await page.getTextContent();
+        const text = content.items
+          .map((item) => {
+            if ("str" in item && typeof item.str === "string") {
+              return item.str;
+            }
+            return "";
+          })
+          .filter(Boolean)
+          .join(" ");
+        if (text.trim()) pages.push(text);
+      } finally {
+        page.cleanup();
+      }
+    }
+
+    return pages.join("\n\n");
+  } finally {
+    await doc.destroy();
   }
 }
 
