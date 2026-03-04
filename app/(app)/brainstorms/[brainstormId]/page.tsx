@@ -181,6 +181,8 @@ export default function BrainstormDetailPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          title,
+          client_name: clientName,
           brief_tone: briefTone,
           client_info: briefSheet.client_info,
           background: briefSheet.background,
@@ -246,7 +248,7 @@ export default function BrainstormDetailPage() {
       const res = await fetch(`/api/brainstorms/${brainstormId}/handoff`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ outputType }),
+        body: JSON.stringify({ title, clientName, outputType }),
       });
       if (!res.ok) return;
       const data = await res.json();
