@@ -514,52 +514,61 @@ export async function POST(request: Request) {
 
       const fullMessages = convertToCoreMessages(body.messages || []);
 
-      // Load summaries from previous steps
-      const { data: summaryRows } = await supabase
-        .from("project_chat_summaries")
-        .select("step, summary")
-        .eq("project_id", projectId)
-        .lt("step", step)
-        .order("step", { ascending: true });
-
-      const summaries = (summaryRows || []).map(
-        (r: { step: number; summary: string }) =>
-          `### ${getStepName(r.step)}\n${r.summary}`
-      );
-
-      // Load step-specific context
-      let stepContext = "";
-      if (step === 1) {
-        stepContext = await loadResearchContext(supabase, projectId);
-      } else if (step === 2) {
-        stepContext = await loadStructureContext(supabase, projectId);
-      } else if (step === 3) {
-        stepContext = await loadDetailsContext(supabase, projectId);
-      } else if (step === 5) {
-        stepContext = await loadDesignContext(supabase, projectId);
-      }
-
-      // Build RAG context from knowledge base
+      // Determine RAG query from last user message
       const lastUserMsg = fullMessages[fullMessages.length - 1];
       const ragQuery = lastUserMsg?.role === "user" ? lastUserMsg.content : "";
-      let ragContext = "";
-      if (ragQuery) {
-        const teamId = await getTeamIdForUser(supabase, user.id);
-        // Use different chunk types based on step
-        const chunkTypes =
-          step === 5
-            ? (["style", "expression", "correction"] as const)
-            : step === 2 || step === 3
-              ? (["composition", "correction", "expression"] as const)
-              : (["correction", "expression"] as const);
-        ragContext = await buildRagContext({
-          query: ragQuery,
-          teamId,
-          chunkTypes: [...chunkTypes],
-          limit: 4,
-          logContext: "project-chat",
-        });
-      }
+
+      // Load all pre-stream data in parallel for fast time-to-first-byte
+      const stepContextLoader =
+        step === 1
+          ? loadResearchContext(supabase, projectId)
+          : step === 2
+            ? loadStructureContext(supabase, projectId)
+            : step === 3
+              ? loadDetailsContext(supabase, projectId)
+              : step === 5
+                ? loadDesignContext(supabase, projectId)
+                : Promise.resolve("");
+
+      const summariesLoader = Promise.resolve(
+        supabase
+          .from("project_chat_summaries")
+          .select("step, summary")
+          .eq("project_id", projectId)
+          .lt("step", step)
+          .order("step", { ascending: true })
+      )
+        .then(({ data }) =>
+          (data || []).map(
+            (r: { step: number; summary: string }) =>
+              `### ${getStepName(r.step)}\n${r.summary}`
+          )
+        )
+        .catch(() => [] as string[]);
+
+      const ragLoader = ragQuery
+        ? getTeamIdForUser(supabase, user.id).then((teamId) => {
+            const chunkTypes =
+              step === 5
+                ? (["style", "expression", "correction"] as const)
+                : step === 2 || step === 3
+                  ? (["composition", "correction", "expression"] as const)
+                  : (["correction", "expression"] as const);
+            return buildRagContext({
+              query: ragQuery,
+              teamId,
+              chunkTypes: [...chunkTypes],
+              limit: 4,
+              logContext: "project-chat",
+            });
+          })
+        : Promise.resolve("");
+
+      const [stepContext, summaries, ragContext] = await Promise.all([
+        stepContextLoader,
+        summariesLoader,
+        ragLoader,
+      ]);
 
       // Window messages to fit context
       const promptMessages = windowByText(fullMessages, (m) => m.content, {
