@@ -22,6 +22,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useProjectChat } from "../chat/use-project-chat";
+import type { ApplyPayload } from "../chat/use-project-chat";
 
 interface PageStructure {
   page_number: number;
@@ -37,23 +39,11 @@ interface PageStructure {
 function SortablePageCard({
   page,
   masterTypeColors,
-  editingPage,
-  setEditingPage,
-  revisionInstruction,
-  setRevisionInstruction,
-  revisePage,
-  revisingPage,
   outputType,
   onMessageChange,
 }: {
   page: PageStructure;
   masterTypeColors: Record<string, string>;
-  editingPage: number | null;
-  setEditingPage: (v: number | null) => void;
-  revisionInstruction: string;
-  setRevisionInstruction: (v: string) => void;
-  revisePage: (pageNumber: number, currentPage: PageStructure) => void;
-  revisingPage: number | null;
   outputType: string;
   onMessageChange: (pageNumber: number, message: string) => void;
 }) {
@@ -78,11 +68,7 @@ function SortablePageCard({
       ref={setNodeRef}
       style={style}
       className={`rounded-lg border bg-white p-3 transition-all ${
-        revisingPage === page.page_number
-          ? "border-navy/30 opacity-70"
-          : isDragging
-            ? "border-navy shadow-lg"
-            : "border-beige"
+        isDragging ? "border-navy shadow-lg" : "border-beige"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -148,64 +134,7 @@ function SortablePageCard({
             </div>
           </div>
         </div>
-        <button
-          onClick={() => {
-            if (editingPage === page.page_number) {
-              setEditingPage(null);
-              setRevisionInstruction("");
-            } else {
-              setEditingPage(page.page_number);
-              setRevisionInstruction("");
-            }
-          }}
-          disabled={revisingPage !== null}
-          className="flex-shrink-0 rounded p-1 text-text-secondary hover:bg-off-white hover:text-navy transition-colors disabled:opacity-50"
-          title="修正指示"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-            <path d="m15 5 4 4"/>
-          </svg>
-        </button>
       </div>
-
-      {/* Revision instruction input */}
-      {editingPage === page.page_number && (
-        <div className="mt-3 border-t border-beige/50 pt-3">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={revisionInstruction}
-              onChange={(e) => setRevisionInstruction(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && revisionInstruction.trim()) {
-                  revisePage(page.page_number, page);
-                }
-              }}
-              placeholder="修正指示を入力（例: もっと具体的なデータを含めて）"
-              className="flex-1 rounded-md border border-beige bg-off-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-secondary/50 focus:border-navy focus:outline-none"
-              autoFocus
-            />
-            <button
-              onClick={() => revisePage(page.page_number, page)}
-              disabled={!revisionInstruction.trim() || revisingPage !== null}
-              className="flex-shrink-0 rounded-md bg-navy px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-navy/90 disabled:opacity-50"
-            >
-              {revisingPage === page.page_number
-                ? "再生成中..."
-                : "再生成"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Loading overlay */}
-      {revisingPage === page.page_number && (
-        <div className="mt-2 flex items-center gap-2 text-xs text-navy">
-          <div className="h-3 w-3 animate-spin rounded-full border-2 border-navy border-t-transparent" />
-          AIが修正中...
-        </div>
-      )}
     </div>
   );
 }
@@ -217,15 +146,29 @@ export default function StructurePage() {
   const [briefSheet, setBriefSheet] = useState("");
   const [researchMemo, setResearchMemo] = useState("");
   const [pages, setPages] = useState<PageStructure[]>([]);
-  const [generating, setGenerating] = useState(false);
-  const [editingPage, setEditingPage] = useState<number | null>(null);
-  const [revisionInstruction, setRevisionInstruction] = useState("");
-  const [revisingPage, setRevisingPage] = useState<number | null>(null);
-  const [globalInstruction, setGlobalInstruction] = useState("");
-  const [revisingAll, setRevisingAll] = useState(false);
   const [structureId, setStructureId] = useState<string | null>(null);
   const [outputType, setOutputType] = useState<string>("slide");
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Chat integration: register handler for APPLY payloads from AI chat
+  const { registerApplyHandler, summarizeCurrentStep } = useProjectChat();
+
+  useEffect(() => {
+    registerApplyHandler((payload: ApplyPayload) => {
+      if (payload.action === "revise_page" && payload.revisedPage) {
+        const revised = payload.revisedPage as PageStructure;
+        setPages((prev) =>
+          prev.map((p) =>
+            p.page_number === revised.page_number ? { ...revised } : p
+          )
+        );
+      } else if (payload.action === "revise_all" && payload.revisedPages) {
+        setPages(payload.revisedPages as PageStructure[]);
+      } else if (payload.action === "reorder" && payload.pages) {
+        setPages(payload.pages as PageStructure[]);
+      }
+    });
+  }, [registerApplyHandler]);
 
   // 全ページのメッセージが入力済みかチェック
   const allMessagesConfirmed = pages.length > 0 && pages.every((p) => (p.message || "").trim().length > 0);
@@ -245,7 +188,18 @@ export default function StructurePage() {
     [projectId]
   );
 
-  const { messages, sendMessage, status } = useChat({ transport });
+  const { messages, sendMessage, status, error, clearError } = useChat({
+    transport,
+    id: `structure-${projectId}`,
+    onError: (err: Error) => {
+      console.error("[structure] AI streaming error:", err);
+    },
+    onFinish: ({ isAbort, isError, isDisconnect }: { isAbort: boolean; isError: boolean; isDisconnect: boolean }) => {
+      if (isAbort) console.warn("[structure] Stream was aborted");
+      if (isError) console.error("[structure] Stream ended with error");
+      if (isDisconnect) console.warn("[structure] Stream disconnected");
+    },
+  });
 
   const isStreaming = status === "streaming" || status === "submitted";
 
@@ -323,13 +277,13 @@ export default function StructurePage() {
     }
   }, [messages]);
 
-  const generateStructure = useCallback(async () => {
-    setGenerating(true);
+  const generateStructure = useCallback(() => {
+    if (isStreaming) return; // guard against double-call
+    clearError();
     sendMessage({
       text: JSON.stringify({ briefSheet, researchMemo }),
     });
-    setGenerating(false);
-  }, [briefSheet, researchMemo, sendMessage]);
+  }, [briefSheet, researchMemo, sendMessage, isStreaming, clearError]);
 
   // Debounced save after reorder
   const saveReorderedPages = useCallback(
@@ -390,70 +344,6 @@ export default function StructurePage() {
     CLOSING: "bg-navy/80 text-white",
   };
 
-  const revisePage = useCallback(
-    async (pageNumber: number, currentPage: PageStructure) => {
-      if (!revisionInstruction.trim()) return;
-      setRevisingPage(pageNumber);
-      try {
-        const res = await fetch("/api/ai/structure/revise", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId,
-            pageNumber,
-            instruction: revisionInstruction,
-            currentPage,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-
-        // Update the page in local state
-        setPages((prev) =>
-          prev.map((p) =>
-            p.page_number === pageNumber
-              ? { ...data.revisedPage, page_number: pageNumber }
-              : p
-          )
-        );
-        setEditingPage(null);
-        setRevisionInstruction("");
-      } catch (err) {
-        console.error("Revision failed:", err);
-      } finally {
-        setRevisingPage(null);
-      }
-    },
-    [projectId, revisionInstruction]
-  );
-
-  const reviseAll = useCallback(
-    async () => {
-      if (!globalInstruction.trim()) return;
-      setRevisingAll(true);
-      try {
-        const res = await fetch("/api/ai/structure/revise-all", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId,
-            instruction: globalInstruction,
-            currentPages: pages,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-        setPages(data.revisedPages);
-        setGlobalInstruction("");
-      } catch (err) {
-        console.error("Global revision failed:", err);
-      } finally {
-        setRevisingAll(false);
-      }
-    },
-    [projectId, globalInstruction, pages]
-  );
-
   // ページメッセージ変更ハンドラー
   const handleMessageChange = useCallback(
     (pageNumber: number, message: string) => {
@@ -475,6 +365,7 @@ export default function StructurePage() {
   );
 
   const completeStructure = async () => {
+    await summarizeCurrentStep();
     const supabase = createClient();
     await supabase
       .from("projects")
@@ -492,10 +383,10 @@ export default function StructurePage() {
           <div className="flex gap-2">
             <button
               onClick={generateStructure}
-              disabled={generating || isStreaming || !briefSheet}
+              disabled={isStreaming || !briefSheet}
               className="rounded-md bg-navy px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-navy/90 disabled:opacity-50"
             >
-              {generating || isStreaming ? "生成中..." : "構成を生成"}
+              {isStreaming ? "生成中..." : "構成を生成"}
             </button>
             <button
               onClick={completeStructure}
@@ -508,32 +399,25 @@ export default function StructurePage() {
           </div>
         </div>
 
-        {/* Global revision input */}
-        {pages.length > 0 && (
-          <div className="mb-4 rounded-lg border border-beige bg-white p-3">
-            <label className="text-xs font-medium text-text-secondary mb-1 block">
-              全体修正指示
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={globalInstruction}
-                onChange={(e) => setGlobalInstruction(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && globalInstruction.trim() && !revisingAll) {
-                    reviseAll();
-                  }
-                }}
-                placeholder="全ページに対する修正指示（例: 各ページにデータ根拠を追加して）"
-                className="flex-1 rounded-md border border-beige bg-off-white px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:border-navy focus:outline-none"
-                disabled={revisingAll}
-              />
+        {/* Error display */}
+        {error && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-red-700">
+                  構成の生成でエラーが発生しました
+                </p>
+                <p className="mt-1 text-xs text-red-600">
+                  {error instanceof Error ? error.message : String(error)}
+                </p>
+              </div>
               <button
-                onClick={reviseAll}
-                disabled={revisingAll || !globalInstruction.trim()}
-                className="flex-shrink-0 rounded-md bg-navy px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-navy/90 disabled:opacity-50"
+                onClick={() => {
+                  clearError();
+                }}
+                className="ml-2 flex-shrink-0 rounded px-2 py-1 text-xs text-red-600 hover:bg-red-100 transition-colors"
               >
-                {revisingAll ? "全体修正中..." : "全体修正"}
+                閉じる
               </button>
             </div>
           </div>
@@ -548,7 +432,7 @@ export default function StructurePage() {
 
         {pages.length === 0 ? (
           <div className="rounded-lg border-2 border-dashed border-beige p-12 text-center">
-            {generating || isStreaming ? (
+            {isStreaming ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="h-8 w-8 animate-spin rounded-full border-3 border-navy border-t-transparent" />
                 <p className="text-sm font-medium text-navy">
@@ -580,12 +464,6 @@ export default function StructurePage() {
                     key={`page-${page.page_number}`}
                     page={page}
                     masterTypeColors={masterTypeColors}
-                    editingPage={editingPage}
-                    setEditingPage={setEditingPage}
-                    revisionInstruction={revisionInstruction}
-                    setRevisionInstruction={setRevisionInstruction}
-                    revisePage={revisePage}
-                    revisingPage={revisingPage}
                     outputType={outputType}
                     onMessageChange={handleMessageChange}
                   />

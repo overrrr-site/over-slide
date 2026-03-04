@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Icon } from "@iconify/react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { StepBar } from "./step-bar";
+import { ProjectChatWrapper } from "./chat/project-chat-wrapper";
 
 export default async function ProjectLayout({
   children,
@@ -67,8 +68,8 @@ export default async function ProjectLayout({
         <StepBar projectId={projectId} currentStep={project.current_step} outputType={project.output_type || "slide"} />
       </div>
 
-      {/* Step content */}
-      <div className="flex-1 overflow-auto">{children}</div>
+      {/* Step content + Chat panel */}
+      <ProjectChatWrapper>{children}</ProjectChatWrapper>
     </div>
   );
 }

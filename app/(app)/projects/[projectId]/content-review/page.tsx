@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useProjectChat } from "../chat/use-project-chat";
 
 interface ReviewItem {
   type: "improvement" | "positive" | "warning";
@@ -47,6 +48,7 @@ type ItemDecision = "adopted" | "rejected" | "pending";
 export default function ContentReviewPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const router = useRouter();
+  const { summarizeCurrentStep } = useProjectChat();
   const [reviews, setReviews] = useState<ModelReview[]>([]);
   const [generating, setGenerating] = useState(false);
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
@@ -263,6 +265,7 @@ export default function ContentReviewPage() {
   };
 
   const completeContentReview = async () => {
+    await summarizeCurrentStep();
     const supabase = createClient();
     await supabase
       .from("projects")

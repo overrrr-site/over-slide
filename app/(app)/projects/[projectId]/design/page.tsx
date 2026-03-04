@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { buildSingleSlideDocument } from "@/lib/slides/base-styles";
 import type { DocumentData, DocxSection, DocxTableData } from "@/lib/docx/types";
+import { useProjectChat } from "../chat/use-project-chat";
+import type { ApplyPayload } from "../chat/use-project-chat";
 
 interface HtmlSlide {
   index: number;
@@ -378,9 +380,7 @@ export default function DesignPage() {
   const [downloadingDocx, setDownloadingDocx] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [editingSlide, setEditingSlide] = useState<number | null>(null);
-  const [revisionInstruction, setRevisionInstruction] = useState("");
-  const [revisingSlide, setRevisingSlide] = useState<number | null>(null);
+  const [chatRevisingSlide, setChatRevisingSlide] = useState<number | null>(null);
 
   // Load existing data on mount
   useEffect(() => {
@@ -453,6 +453,50 @@ export default function DesignPage() {
     load();
   }, [projectId]);
 
+  const { registerApplyHandler, summarizeCurrentStep } = useProjectChat();
+  const slidesRef = useRef(slides);
+  slidesRef.current = slides;
+
+  // Handle APPLY from chat (delegated slide revision)
+  useEffect(() => {
+    registerApplyHandler(async (payload: ApplyPayload) => {
+      if (
+        payload.action === "revise_slide" &&
+        typeof payload.slideIndex === "number"
+      ) {
+        const slideIndex = payload.slideIndex as number;
+        const instruction = payload.instruction as string;
+        const currentSlide = slidesRef.current[slideIndex];
+        if (!currentSlide || !instruction) return;
+
+        setChatRevisingSlide(slideIndex);
+        try {
+          const res = await fetch("/api/ai/design/revise", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              projectId,
+              slideIndex,
+              instruction,
+              currentSlide,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data.revisedSlide) {
+            setSlides((prev) =>
+              prev.map((s, i) => (i === slideIndex ? data.revisedSlide : s))
+            );
+            setDownloadUrl(null);
+          }
+        } catch (err) {
+          console.error("[design] Chat revision failed:", err);
+        } finally {
+          setChatRevisingSlide(null);
+        }
+      }
+    });
+  }, [registerApplyHandler, projectId]);
+
   // Generate HTML slides
   const generateSlides = async () => {
     setGenerating(true);
@@ -508,47 +552,6 @@ export default function DesignPage() {
     }
   };
 
-  // Revise a single slide
-  const reviseSlide = useCallback(
-    async (slideIndex: number) => {
-      if (!revisionInstruction.trim()) return;
-      const currentSlide = slides[slideIndex];
-      if (!currentSlide) return;
-
-      setRevisingSlide(slideIndex);
-      setError(null);
-
-      try {
-        const res = await fetch("/api/ai/design/revise", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId,
-            slideIndex,
-            instruction: revisionInstruction,
-            currentSlide,
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-
-        // Update the slide in local state
-        setSlides((prev) =>
-          prev.map((s, i) => (i === slideIndex ? data.revisedSlide : s))
-        );
-        setEditingSlide(null);
-        setRevisionInstruction("");
-        setDownloadUrl(null); // PDF needs re-generation
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "修正に失敗しました");
-      } finally {
-        setRevisingSlide(null);
-      }
-    },
-    [projectId, revisionInstruction, slides]
-  );
-
   // Generate and download docx
   const downloadDocx = async () => {
     setDownloadingDocx(true);
@@ -585,6 +588,7 @@ export default function DesignPage() {
 
   // Complete design and move to review (or finish for documents)
   const completeDesign = async () => {
+    await summarizeCurrentStep();
     const supabase = createClient();
 
     if (outputType === "document") {
@@ -763,50 +767,19 @@ export default function DesignPage() {
               <div
                 key={index}
                 className={`rounded-lg border bg-white transition-all ${
-                  revisingSlide === index
+                  chatRevisingSlide === index
                     ? "border-navy/30 opacity-70"
                     : "border-beige"
                 }`}
               >
                 {/* Slide header */}
-                <div className="flex items-center justify-between gap-2 border-b border-beige/50 px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-navy/10 px-1.5 py-0.5 text-xs font-medium text-navy">
-                      {slide.slideType}
-                    </span>
-                    <span className="text-xs text-text-secondary">
-                      {index + 1} / {slides.length}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (editingSlide === index) {
-                        setEditingSlide(null);
-                        setRevisionInstruction("");
-                      } else {
-                        setEditingSlide(index);
-                        setRevisionInstruction("");
-                      }
-                    }}
-                    disabled={revisingSlide !== null}
-                    className="flex-shrink-0 rounded p-1 text-text-secondary hover:bg-off-white hover:text-navy transition-colors disabled:opacity-50"
-                    title="修正指示"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                      <path d="m15 5 4 4" />
-                    </svg>
-                  </button>
+                <div className="flex items-center gap-2 border-b border-beige/50 px-3 py-2">
+                  <span className="rounded bg-navy/10 px-1.5 py-0.5 text-xs font-medium text-navy">
+                    {slide.slideType}
+                  </span>
+                  <span className="text-xs text-text-secondary">
+                    {index + 1} / {slides.length}
+                  </span>
                 </div>
 
                 {/* Slide iframe preview (16:9) */}
@@ -851,47 +824,11 @@ export default function DesignPage() {
                   </p>
                 </div>
 
-                {/* Revision instruction input */}
-                {editingSlide === index && (
-                  <div className="border-t border-beige/50 px-3 py-3">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={revisionInstruction}
-                        onChange={(e) =>
-                          setRevisionInstruction(e.target.value)
-                        }
-                        onKeyDown={(e) => {
-                          if (
-                            e.key === "Enter" &&
-                            revisionInstruction.trim()
-                          ) {
-                            reviseSlide(index);
-                          }
-                        }}
-                        placeholder="修正指示を入力（例: グラフの色を緑に変更）"
-                        className="flex-1 rounded-md border border-beige bg-off-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-secondary/50 focus:border-navy focus:outline-none"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => reviseSlide(index)}
-                        disabled={
-                          !revisionInstruction.trim() ||
-                          revisingSlide !== null
-                        }
-                        className="flex-shrink-0 rounded-md bg-navy px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-navy/90 disabled:opacity-50"
-                      >
-                        {revisingSlide === index ? "再生成中..." : "再生成"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Loading overlay */}
-                {revisingSlide === index && (
+                {/* Loading overlay for chat revision */}
+                {chatRevisingSlide === index && (
                   <div className="px-3 pb-3 flex items-center gap-2 text-xs text-navy">
                     <div className="h-3 w-3 animate-spin rounded-full border-2 border-navy border-t-transparent" />
-                    AIが修正中...
+                    AIがスライドを修正中...
                   </div>
                 )}
               </div>

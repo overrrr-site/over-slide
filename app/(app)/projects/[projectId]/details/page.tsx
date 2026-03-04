@@ -5,6 +5,8 @@ import { DefaultChatTransport } from "ai";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useProjectChat } from "../chat/use-project-chat";
+import type { ApplyPayload } from "../chat/use-project-chat";
 
 export default function DetailsPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -14,12 +16,27 @@ export default function DetailsPage() {
   const [pageContents, setPageContents] = useState<Record<string, unknown>[]>([]);
   const [generating, setGenerating] = useState(false);
   const [progressCount, setProgressCount] = useState(0);
-  const [editingPage, setEditingPage] = useState<number | null>(null);
-  const [revisionInstruction, setRevisionInstruction] = useState("");
-  const [revisingPage, setRevisingPage] = useState<number | null>(null);
-  const [globalInstruction, setGlobalInstruction] = useState("");
-  const [revisingAll, setRevisingAll] = useState(false);
   const [outputType, setOutputType] = useState<string>("slide");
+
+  const { registerApplyHandler, summarizeCurrentStep } = useProjectChat();
+
+  // Register handler for APPLY payloads from chat
+  useEffect(() => {
+    registerApplyHandler((payload: ApplyPayload) => {
+      if (payload.action === "revise_page" && payload.revisedPage) {
+        const revised = payload.revisedPage as Record<string, unknown>;
+        setPageContents((prev) =>
+          prev.map((p) =>
+            (p.page_number as number) === (revised.page_number as number)
+              ? { ...revised }
+              : p
+          )
+        );
+      } else if (payload.action === "revise_all" && payload.revisedPages) {
+        setPageContents(payload.revisedPages as Record<string, unknown>[]);
+      }
+    });
+  }, [registerApplyHandler]);
 
   const transport = useMemo(
     () =>
@@ -120,71 +137,8 @@ export default function DetailsPage() {
     setGenerating(false);
   }, [structure, researchMemo, sendMessage]);
 
-  const revisePage = useCallback(
-    async (pageNumber: number, currentPage: Record<string, unknown>) => {
-      if (!revisionInstruction.trim()) return;
-      setRevisingPage(pageNumber);
-      try {
-        const res = await fetch("/api/ai/details/revise", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId,
-            pageNumber,
-            instruction: revisionInstruction,
-            currentPage,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-
-        // Update the page in local state
-        setPageContents((prev) =>
-          prev.map((p) =>
-            (p.page_number as number) === pageNumber
-              ? data.revisedPage
-              : p
-          )
-        );
-        setEditingPage(null);
-        setRevisionInstruction("");
-      } catch (err) {
-        console.error("Revision failed:", err);
-      } finally {
-        setRevisingPage(null);
-      }
-    },
-    [projectId, revisionInstruction]
-  );
-
-  const reviseAll = useCallback(
-    async () => {
-      if (!globalInstruction.trim()) return;
-      setRevisingAll(true);
-      try {
-        const res = await fetch("/api/ai/details/revise-all", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId,
-            instruction: globalInstruction,
-            currentPages: pageContents,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-        setPageContents(data.revisedPages);
-        setGlobalInstruction("");
-      } catch (err) {
-        console.error("Global revision failed:", err);
-      } finally {
-        setRevisingAll(false);
-      }
-    },
-    [projectId, globalInstruction, pageContents]
-  );
-
   const completeDetails = async () => {
+    await summarizeCurrentStep();
     const supabase = createClient();
     await supabase
       .from("projects")
@@ -231,37 +185,6 @@ export default function DetailsPage() {
           </div>
         )}
 
-        {/* Global revision input */}
-        {pageContents.length > 0 && (
-          <div className="mb-4 rounded-lg border border-beige bg-white p-3">
-            <label className="text-xs font-medium text-text-secondary mb-1 block">
-              全体修正指示
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={globalInstruction}
-                onChange={(e) => setGlobalInstruction(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && globalInstruction.trim() && !revisingAll) {
-                    reviseAll();
-                  }
-                }}
-                placeholder="全ページに対する修正指示（例: すべてのページに具体的な数値を追加して）"
-                className="flex-1 rounded-md border border-beige bg-off-white px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:border-navy focus:outline-none"
-                disabled={revisingAll}
-              />
-              <button
-                onClick={reviseAll}
-                disabled={revisingAll || !globalInstruction.trim()}
-                className="flex-shrink-0 rounded-md bg-navy px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-navy/90 disabled:opacity-50"
-              >
-                {revisingAll ? "全体修正中..." : "全体修正"}
-              </button>
-            </div>
-          </div>
-        )}
-
         {pageContents.length === 0 ? (
           <div className="rounded-lg border-2 border-dashed border-beige p-12 text-center">
             <p className="text-sm text-text-secondary">
@@ -275,45 +198,20 @@ export default function DetailsPage() {
               return (
                 <div
                   key={index}
-                  className={`rounded-lg border bg-white p-4 transition-all ${
-                    revisingPage === pageNum
-                      ? "border-navy/30 opacity-70"
-                      : "border-beige"
-                  }`}
+                  className="rounded-lg border border-beige bg-white p-4"
                 >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="rounded bg-navy/10 px-1.5 py-0.5 text-xs font-medium text-navy">
-                        P{pageNum}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="rounded bg-navy/10 px-1.5 py-0.5 text-xs font-medium text-navy">
+                      P{pageNum}
+                    </span>
+                    {outputType !== "document" && (
+                      <span className="rounded bg-green/10 px-1.5 py-0.5 text-xs font-medium text-green">
+                        {page.master_type as string}
                       </span>
-                      {outputType !== "document" && (
-                        <span className="rounded bg-green/10 px-1.5 py-0.5 text-xs font-medium text-green">
-                          {page.master_type as string}
-                        </span>
-                      )}
-                      <h3 className="text-sm font-medium text-navy truncate">
-                        {page.title as string}
-                      </h3>
-                    </div>
-                    <button
-                      onClick={() => {
-                        if (editingPage === pageNum) {
-                          setEditingPage(null);
-                          setRevisionInstruction("");
-                        } else {
-                          setEditingPage(pageNum);
-                          setRevisionInstruction("");
-                        }
-                      }}
-                      disabled={revisingPage !== null}
-                      className="flex-shrink-0 rounded p-1 text-text-secondary hover:bg-off-white hover:text-navy transition-colors disabled:opacity-50"
-                      title="修正指示"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-                        <path d="m15 5 4 4"/>
-                      </svg>
-                    </button>
+                    )}
+                    <h3 className="text-sm font-medium text-navy truncate">
+                      {page.title as string}
+                    </h3>
                   </div>
 
                   {typeof page.body === "string" && page.body && (
@@ -351,41 +249,6 @@ export default function DetailsPage() {
                     </div>
                   )}
 
-                  {/* Revision instruction input */}
-                  {editingPage === pageNum && (
-                    <div className="mt-3 border-t border-beige/50 pt-3">
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={revisionInstruction}
-                          onChange={(e) => setRevisionInstruction(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && revisionInstruction.trim()) {
-                              revisePage(pageNum, page);
-                            }
-                          }}
-                          placeholder="修正指示を入力（例: 具体的な数値データを追加して）"
-                          className="flex-1 rounded-md border border-beige bg-off-white px-3 py-1.5 text-xs text-text-primary placeholder:text-text-secondary/50 focus:border-navy focus:outline-none"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => revisePage(pageNum, page)}
-                          disabled={!revisionInstruction.trim() || revisingPage !== null}
-                          className="flex-shrink-0 rounded-md bg-navy px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-navy/90 disabled:opacity-50"
-                        >
-                          {revisingPage === pageNum ? "再生成中..." : "再生成"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Loading overlay */}
-                  {revisingPage === pageNum && (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-navy">
-                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-navy border-t-transparent" />
-                      AIが修正中...
-                    </div>
-                  )}
                 </div>
               );
             })}

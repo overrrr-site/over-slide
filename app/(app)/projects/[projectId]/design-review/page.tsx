@@ -10,11 +10,13 @@ import { ResultView } from "./components/result-view";
 import type { ItemDecision, ModelReview, ReviewItem } from "./types";
 import { ReviewScoreComparison } from "./components/review-score-comparison";
 import { ReviewDetailSection } from "./components/review-detail-section";
+import { useProjectChat } from "../chat/use-project-chat";
 
 export default function DesignReviewPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const router = useRouter();
   const { runWithTimeout } = useAbortableAction();
+  const { summarizeCurrentStep } = useProjectChat();
   const [reviews, setReviews] = useState<ModelReview[]>([]);
   const [generating, setGenerating] = useState(false);
   const [deepMode, setDeepMode] = useState(false);
@@ -287,6 +289,7 @@ export default function DesignReviewPage() {
 
   // Complete design review
   const completeDesignReview = async () => {
+    await summarizeCurrentStep();
     const supabase = createClient();
     await supabase
       .from("projects")

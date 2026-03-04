@@ -563,6 +563,15 @@ export function useResearchWorkspace() {
     streamingMemoText,
   ]);
 
+  // Exposed for AI assistant APPLY handler
+  const applyMemoRevision = useCallback(
+    (instruction: string) => {
+      if (!instruction.trim() || isStreaming || activeRequestMode) return;
+      requestMemoUpdate(instruction, chatHistory);
+    },
+    [activeRequestMode, chatHistory, isStreaming, requestMemoUpdate]
+  );
+
   const completeResearch = useCallback(async () => {
     const currentMemo = (streamingMemoText || memoDraft).trim();
     if (currentMemo) {
@@ -640,5 +649,6 @@ export function useResearchWorkspace() {
     updateMemoDraft,
     updateChatInstruction,
     sendChatInstruction,
+    applyMemoRevision,
   };
 }
