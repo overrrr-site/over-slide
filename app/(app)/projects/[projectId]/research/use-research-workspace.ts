@@ -17,6 +17,7 @@ import {
   mergeSearchResults,
   normalizeSearchResults,
 } from "@/lib/research/text-utils";
+import { mergeMemoSections } from "@/lib/research/memo-section-merger";
 import {
   normalizeKeywordTextToQueries,
   parseResearchTopicsToQueries,
@@ -93,6 +94,15 @@ export function useResearchWorkspace() {
       .join("")
       .trim();
   }, [messages]);
+
+  // 部分編集モード: チャット指示時はAIが変更セクションだけ返すので、
+  // 既存メモとマージした結果を表示に使う
+  const mergedStreamingMemo = useMemo(() => {
+    if (activeRequestMode !== "chat" || !streamingMemoText || !memoDraft) {
+      return "";
+    }
+    return mergeMemoSections(memoDraft, streamingMemoText);
+  }, [activeRequestMode, memoDraft, streamingMemoText]);
 
   const isStreaming = status === "streaming" || status === "submitted";
 
@@ -511,14 +521,20 @@ export function useResearchWorkspace() {
     prevStreamingRef.current = false;
 
     const finalize = async () => {
-      const generatedMemo = streamingMemoText.trim();
-      if (!generatedMemo) {
+      const rawOutput = streamingMemoText.trim();
+      if (!rawOutput) {
         setMemoNotice("AIの応答を取得できませんでした。再度お試しください。");
         setActiveRequestMode(null);
         setInFlightChatHistory(null);
         setInFlightInstruction("");
         return;
       }
+
+      // 部分編集の場合: AI出力（変更セクションのみ）を既存メモにマージ
+      const generatedMemo =
+        activeRequestMode === "chat" && memoDraft
+          ? mergeMemoSections(memoDraft, rawOutput)
+          : rawOutput;
 
       let nextHistory = inFlightChatHistory ?? chatHistory;
       if (activeRequestMode === "chat") {
@@ -633,6 +649,7 @@ export function useResearchWorkspace() {
     addedQueries,
     queryList,
     streamingMemoText,
+    mergedStreamingMemo,
     isStreaming,
     error,
     updateBriefField,

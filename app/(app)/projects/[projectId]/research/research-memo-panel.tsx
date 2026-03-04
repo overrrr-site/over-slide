@@ -11,6 +11,7 @@ type Props = Pick<
   | "runningAutonomous"
   | "isStreaming"
   | "streamingMemoText"
+  | "mergedStreamingMemo"
   | "memoDraft"
   | "updateMemoDraft"
   | "memoNotice"
@@ -24,6 +25,7 @@ export function ResearchMemoPanel(props: Props) {
     runningAutonomous,
     isStreaming,
     streamingMemoText,
+    mergedStreamingMemo,
     memoDraft,
     updateMemoDraft,
     memoNotice,
@@ -42,7 +44,7 @@ export function ResearchMemoPanel(props: Props) {
                 savingMemo ||
                 runningAutonomous ||
                 isStreaming ||
-                !(streamingMemoText || memoDraft).trim()
+                !(mergedStreamingMemo || streamingMemoText || memoDraft).trim()
               }
               className="rounded border border-green px-3 py-1 text-xs font-medium text-green transition-colors hover:bg-green/10 disabled:opacity-50"
             >
@@ -50,7 +52,7 @@ export function ResearchMemoPanel(props: Props) {
             </button>
           </div>
           <textarea
-            value={streamingMemoText || memoDraft}
+            value={mergedStreamingMemo || streamingMemoText || memoDraft}
             onChange={(event) => updateMemoDraft(event.target.value)}
             disabled={isStreaming}
             rows={24}

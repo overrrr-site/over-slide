@@ -4,7 +4,11 @@ import { requireAuth } from "@/lib/api/auth";
 import { withErrorHandling } from "@/lib/api/error";
 import { sonnet } from "@/lib/ai/anthropic";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
-import { RESEARCH_MEMO_PROMPT } from "@/lib/ai/prompts/research";
+import {
+  RESEARCH_MEMO_PROMPT,
+  RESEARCH_MEMO_EDIT_PROMPT,
+} from "@/lib/ai/prompts/research";
+import { mergeMemoSections } from "@/lib/research/memo-section-merger";
 import {
   dedupeSearchResults,
   extractQueriesFromKeywords,
@@ -163,11 +167,20 @@ export async function POST(request: Request) {
         ? `${promptContext}\n\n${knowledge.context}`
         : promptContext;
 
-      const taskPrompt = instructionText
-        ? "既存のリサーチメモを土台に、追加指示を反映してメモ全体を更新してください。構成見出しは維持しつつ、根拠不足の箇所は明記してください。"
-        : existingMemoText
-          ? "既存のリサーチメモを土台に、新規の検索結果を反映して更新してください。既存情報は残しつつ、不正確な記述は修正してください。"
-          : "以下の情報をもとにリサーチメモを作成してください。";
+      // 部分編集モード: instruction ありかつ既存メモがある場合
+      const isPartialEdit = !!(instructionText && existingMemoText);
+
+      const taskPrompt = isPartialEdit
+        ? "以下の追加指示に従い、既存リサーチメモの該当セクションだけを修正して出力してください。変更不要のセクションは出力しないでください。"
+        : instructionText
+          ? "既存のリサーチメモを土台に、追加指示を反映してメモ全体を更新してください。構成見出しは維持しつつ、根拠不足の箇所は明記してください。"
+          : existingMemoText
+            ? "既存のリサーチメモを土台に、新規の検索結果を反映して更新してください。既存情報は残しつつ、不正確な記述は修正してください。"
+            : "以下の情報をもとにリサーチメモを作成してください。";
+
+      const systemPrompt = isPartialEdit
+        ? RESEARCH_MEMO_EDIT_PROMPT
+        : RESEARCH_MEMO_PROMPT;
 
       const normalizedSearchResults = normalizeSearchResultsForStorage(
         (Array.isArray(searchResults) ? searchResults : []) as PromptSearchResultInput[]
@@ -178,12 +191,12 @@ export async function POST(request: Request) {
       const normalizedChatHistory = normalizeChatHistory(chatHistory);
 
       console.log(
-        `[research] contextChars=${promptContextWithKnowledge.length} existingMemo=${existingMemoText ? 1 : 0} instruction=${instructionText ? 1 : 0} search=${searchSection.included}/${searchSection.total} files=${fileSection.included}/${fileSection.total} kb=${knowledge.chunkCount}`
+        `[research] mode=${isPartialEdit ? "partial" : "full"} contextChars=${promptContextWithKnowledge.length} existingMemo=${existingMemoText ? 1 : 0} instruction=${instructionText ? 1 : 0} search=${searchSection.included}/${searchSection.total} files=${fileSection.included}/${fileSection.total} kb=${knowledge.chunkCount}`
       );
 
       const result = streamText({
         model: sonnet,
-        system: RESEARCH_MEMO_PROMPT,
+        system: systemPrompt,
         prompt: `${taskPrompt}\n\n${promptContextWithKnowledge}`,
         async onFinish({ text, totalUsage }) {
           await recordAiUsage({
@@ -198,6 +211,11 @@ export async function POST(request: Request) {
             usage: totalUsage,
           });
 
+          // 部分編集の場合はマージした結果を保存
+          const finalMarkdown = isPartialEdit
+            ? mergeMemoSections(existingMemo, text)
+            : text;
+
           if (projectId) {
             await supabase.from("research_memos").upsert(
               {
@@ -205,7 +223,7 @@ export async function POST(request: Request) {
                 theme_keywords: normalizedKeywords,
                 search_queries: parsedKeywordQueries,
                 search_results: normalizedSearchResults,
-                raw_markdown: text,
+                raw_markdown: finalMarkdown,
                 content: {
                   chat_history: normalizedChatHistory,
                   latest_instruction: instructionText || null,
