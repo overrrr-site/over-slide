@@ -5,6 +5,7 @@ import { Icon } from "@iconify/react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { StepBar } from "./step-bar";
 import { ProjectChatWrapper } from "./chat/project-chat-wrapper";
+import { ProjectHeaderMeta } from "./project-header-meta";
 
 export default async function ProjectLayout({
   children,
@@ -48,14 +49,11 @@ export default async function ProjectLayout({
         </div>
 
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-navy">{project.title}</h1>
-            {project.client_name && (
-              <p className="text-xs text-text-secondary">
-                {project.client_name}
-              </p>
-            )}
-          </div>
+          <ProjectHeaderMeta
+            projectId={projectId}
+            initialTitle={project.title}
+            initialClientName={project.client_name || ""}
+          />
           <div className="flex items-center gap-1.5 text-xs text-text-secondary">
             <Icon
               icon={project.output_type === "document" ? "mdi:file-document-outline" : "mdi:presentation"}
