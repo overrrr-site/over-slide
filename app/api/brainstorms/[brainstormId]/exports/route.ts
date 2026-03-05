@@ -1,40 +1,122 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthJson } from "@/lib/api/auth";
 import { generateDocx } from "@/lib/docx/generator";
-import type { DocumentData } from "@/lib/docx/types";
+import type { DocumentData, DocxSection } from "@/lib/docx/types";
 import { buildBriefSheetMarkdown } from "@/lib/brief-sheet/format";
+
+interface BriefFields {
+  client_info: string;
+  background: string;
+  hypothesis: string;
+  goal: string;
+  constraints: string;
+  research_topics: string;
+  structure_draft: string;
+  reasoning_chain?: string;
+  rejected_alternatives?: string;
+  key_expressions?: string;
+  discussion_note?: string;
+}
+
+/** 構成骨格案のテキストを番号付き項目に分割する */
+function parseStructureDraft(text: string): DocxSection[] {
+  // 「1. 」「2. 」等の番号付きリスト or 「セクション1：」形式を検出
+  const lines = text.split(/\n/).filter((l) => l.trim());
+  const items: DocxSection[] = [];
+
+  for (const line of lines) {
+    const match = line.match(/^\d+[\.\)．）]\s*(.+)/);
+    if (match) {
+      // 「セクション名：説明」を分割
+      const colonIdx = match[1].search(/[：:]/);
+      if (colonIdx > 0) {
+        items.push({
+          level: 2,
+          title: match[1].slice(0, colonIdx).trim(),
+          body: match[1].slice(colonIdx + 1).trim(),
+        });
+      } else {
+        items.push({ level: 2, title: match[1].trim(), body: undefined });
+      }
+    }
+  }
+
+  // 番号付きリストが検出できなかった場合は段落テキストとして返す
+  if (items.length === 0) {
+    return [{ level: 2, title: "概要", body: text }];
+  }
+  return items;
+}
 
 function buildDocumentData(
   title: string,
   clientName: string,
-  fields: {
-    client_info: string;
-    background: string;
-    hypothesis: string;
-    goal: string;
-    constraints: string;
-    research_topics: string;
-    structure_draft: string;
-  }
+  fields: BriefFields
 ): DocumentData {
-  const sections = [
-    { key: "client_info", label: "クライアント" },
-    { key: "background", label: "背景・課題" },
-    { key: "hypothesis", label: "提案の方向性" },
-    { key: "goal", label: "ゴール" },
-    { key: "constraints", label: "制約条件" },
-    { key: "research_topics", label: "リサーチで確認すべきこと" },
-    { key: "structure_draft", label: "構成の骨格案" },
-  ] as const;
+  const f = (v: string | undefined) => v?.trim() || "（未定）";
+
+  const sections: DocxSection[] = [];
+
+  // H1: プロジェクト概要
+  sections.push({
+    level: 1,
+    title: "プロジェクト概要",
+    children: [
+      { level: 2, title: "クライアント", body: f(fields.client_info) },
+      { level: 2, title: "背景・課題", body: f(fields.background) },
+      { level: 2, title: "ゴール", body: f(fields.goal) },
+      { level: 2, title: "制約条件", body: f(fields.constraints) },
+    ],
+  });
+
+  // H1: 提案の方向性
+  sections.push({
+    level: 1,
+    title: "提案の方向性",
+    body: f(fields.hypothesis),
+  });
+
+  // H1: 構成の骨格案（番号付き項目をH2に分割）
+  sections.push({
+    level: 1,
+    title: "構成の骨格案",
+    children: parseStructureDraft(f(fields.structure_draft)),
+  });
+
+  // H1: リサーチで確認すべきこと
+  sections.push({
+    level: 1,
+    title: "リサーチで確認すべきこと",
+    body: f(fields.research_topics),
+  });
+
+  // H1: 議論の記録（新フィールドがあれば追加）
+  const discussionChildren: DocxSection[] = [];
+  if (fields.reasoning_chain?.trim()) {
+    discussionChildren.push({ level: 2, title: "思考の流れ", body: fields.reasoning_chain.trim() });
+  }
+  if (fields.rejected_alternatives?.trim()) {
+    discussionChildren.push({ level: 2, title: "却下した選択肢", body: fields.rejected_alternatives.trim() });
+  }
+  if (fields.key_expressions?.trim()) {
+    discussionChildren.push({ level: 2, title: "キーフレーズ", body: fields.key_expressions.trim() });
+  }
+  if (fields.discussion_note?.trim()) {
+    discussionChildren.push({ level: 2, title: "議論ノート", body: fields.discussion_note.trim() });
+  }
+  if (discussionChildren.length > 0) {
+    sections.push({
+      level: 1,
+      title: "議論の記録",
+      children: discussionChildren,
+    });
+  }
 
   return {
     title: `${title} - ブリーフシート`,
     subtitle: clientName || undefined,
-    sections: sections.map((item) => ({
-      level: 2,
-      title: item.label,
-      body: fields[item.key] || "（未定）",
-    })),
+    date: new Date().toLocaleDateString("ja-JP"),
+    sections,
   };
 }
 
@@ -58,7 +140,7 @@ export async function POST(
 
   const { data: session } = await supabase
     .from("brainstorm_sessions")
-    .select("id, title, client_name, client_info, background, hypothesis, goal, constraints, research_topics, structure_draft, raw_markdown")
+    .select("id, title, client_name, client_info, background, hypothesis, goal, constraints, research_topics, structure_draft, raw_markdown, reasoning_chain, rejected_alternatives, key_expressions, discussion_note")
     .eq("id", brainstormId)
     .single();
 
@@ -66,7 +148,7 @@ export async function POST(
     return NextResponse.json({ error: "Brainstorm not found" }, { status: 404 });
   }
 
-  const markdown = session.raw_markdown || buildBriefSheetMarkdown({
+  const briefFields: BriefFields = {
     client_info: session.client_info || "",
     background: session.background || "",
     hypothesis: session.hypothesis || "",
@@ -74,7 +156,13 @@ export async function POST(
     constraints: session.constraints || "",
     research_topics: session.research_topics || "",
     structure_draft: session.structure_draft || "",
-  });
+    reasoning_chain: session.reasoning_chain || "",
+    rejected_alternatives: session.rejected_alternatives || "",
+    key_expressions: session.key_expressions || "",
+    discussion_note: session.discussion_note || "",
+  };
+
+  const markdown = session.raw_markdown || buildBriefSheetMarkdown(briefFields);
 
   let buffer: Buffer;
   let contentType: string;
@@ -86,15 +174,7 @@ export async function POST(
     const documentData = buildDocumentData(
       session.title || "ブリーフ",
       session.client_name || "",
-      {
-        client_info: session.client_info || "",
-        background: session.background || "",
-        hypothesis: session.hypothesis || "",
-        goal: session.goal || "",
-        constraints: session.constraints || "",
-        research_topics: session.research_topics || "",
-        structure_draft: session.structure_draft || "",
-      }
+      briefFields,
     );
     buffer = await generateDocx(documentData);
     contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";

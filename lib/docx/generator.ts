@@ -20,7 +20,6 @@ import {
   Footer,
   PageNumber,
   NumberFormat,
-  TableOfContents,
   ShadingType,
 } from "docx";
 import type { DocumentData, DocxSection, DocxTableData } from "./types";
@@ -47,76 +46,44 @@ const CONTENT_WIDTH_DXA = 9026; // A4 width (11906) - left (1440) - right (1440)
 export async function generateDocx(data: DocumentData): Promise<Buffer> {
   const children: DocChild[] = [];
 
-  // ── 表紙 ──
-  // 上部スペース
-  children.push(new Paragraph({ spacing: { before: 3600 } }));
-
-  // サブタイトル（日付・宛先など）があれば先に表示
-  if (data.subtitle) {
-    const subLines = data.subtitle.split("\n").filter((l) => l.trim());
-    for (const line of subLines) {
-      children.push(
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: line,
-              font: { name: FONT_EN, eastAsia: FONT_JP },
-              size: 22, // 11pt
-              color: COLOR_LIGHT,
-            }),
-          ],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 60 },
-        })
-      );
-    }
-    children.push(new Paragraph({ spacing: { before: 200 } }));
-  }
-
-  // メインタイトル
+  // ── タイトル＋日付（1枚目上部） ──
   children.push(
     new Paragraph({
       children: [
         new TextRun({
           text: data.title,
           font: { name: FONT_EN, eastAsia: FONT_JP },
-          size: 48, // 24pt
-          bold: true,
-          color: COLOR_NAVY,
-        }),
-      ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 600 },
-    })
-  );
-
-  // 改ページ（表紙後）
-  children.push(new Paragraph({ pageBreakBefore: true }));
-
-  // ── 目次 ──
-  children.push(
-    new Paragraph({
-      children: [
-        new TextRun({
-          text: "目次",
-          font: { name: FONT_EN, eastAsia: FONT_JP },
           size: 28, // 14pt
           bold: true,
           color: COLOR_NAVY,
         }),
       ],
-      spacing: { after: 200 },
-    }),
-    new TableOfContents("目次", {
-      hyperlink: true,
-      headingStyleRange: "1-3",
-    }),
-    new Paragraph({ pageBreakBefore: true })
+      spacing: { after: 80 },
+    })
   );
 
+  if (data.date || data.subtitle) {
+    const parts: string[] = [];
+    if (data.date) parts.push(data.date);
+    if (data.subtitle) parts.push(data.subtitle);
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: parts.join("  |  "),
+            font: { name: FONT_EN, eastAsia: FONT_JP },
+            size: 20, // 10pt
+            color: COLOR_LIGHT,
+          }),
+        ],
+        spacing: { after: 300 },
+      })
+    );
+  }
+
   // ── セクション ──
-  for (const section of data.sections) {
-    buildSection(children, section);
+  for (let i = 0; i < data.sections.length; i++) {
+    buildSection(children, data.sections[i], i === 0);
   }
 
   const doc = new Document({
@@ -259,7 +226,7 @@ export async function generateDocx(data: DocumentData): Promise<Buffer> {
 }
 
 // ── セクション構築（章見出し=改ページ、節・項=連続表示） ──
-function buildSection(children: DocChild[], section: DocxSection): void {
+function buildSection(children: DocChild[], section: DocxSection, isFirst = false): void {
   const headingMap: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
     1: HeadingLevel.HEADING_1,
     2: HeadingLevel.HEADING_2,
@@ -272,7 +239,7 @@ function buildSection(children: DocChild[], section: DocxSection): void {
       new Paragraph({
         text: section.title,
         heading: headingMap[section.level],
-        ...(section.level === 1 ? { pageBreakBefore: true } : {}),
+        ...(section.level === 1 && !isFirst ? { pageBreakBefore: true } : {}),
       })
     );
   }

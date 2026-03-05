@@ -34,31 +34,31 @@ function fallback(value: string): string {
 }
 
 export function buildBriefSheetMarkdown(fields: BriefSheetFields): string {
-  let md = `■ ブリーフシート
-──────────────────────────
-クライアント：${fallback(fields.client_info)}
-背景・課題：${fallback(fields.background)}
-提案の方向性：${fallback(fields.hypothesis)}
-ゴール：${fallback(fields.goal)}
-制約条件：${fallback(fields.constraints)}
-リサーチで確認すべきこと：${fallback(fields.research_topics)}
-構成の骨格案：${fallback(fields.structure_draft)}`;
+  const sections: string[] = [
+    `# ブリーフシート`,
+    `## クライアント\n${fallback(fields.client_info)}`,
+    `## 背景・課題\n${fallback(fields.background)}`,
+    `## 提案の方向性\n${fallback(fields.hypothesis)}`,
+    `## ゴール\n${fallback(fields.goal)}`,
+    `## 制約条件\n${fallback(fields.constraints)}`,
+    `## リサーチで確認すべきこと\n${fallback(fields.research_topics)}`,
+    `## 構成の骨格案\n${fallback(fields.structure_draft)}`,
+  ];
 
   if (fields.reasoning_chain?.trim()) {
-    md += `\n思考の流れ：${fields.reasoning_chain.trim()}`;
+    sections.push(`## 思考の流れ\n${fields.reasoning_chain.trim()}`);
   }
   if (fields.rejected_alternatives?.trim()) {
-    md += `\n却下した選択肢：${fields.rejected_alternatives.trim()}`;
+    sections.push(`## 却下した選択肢\n${fields.rejected_alternatives.trim()}`);
   }
   if (fields.key_expressions?.trim()) {
-    md += `\nキーフレーズ：${fields.key_expressions.trim()}`;
+    sections.push(`## キーフレーズ\n${fields.key_expressions.trim()}`);
   }
   if (fields.discussion_note?.trim()) {
-    md += `\n議論ノート：${fields.discussion_note.trim()}`;
+    sections.push(`## 議論ノート\n${fields.discussion_note.trim()}`);
   }
 
-  md += "\n──────────────────────────";
-  return md;
+  return sections.join("\n\n");
 }
 
 export function normalizeBriefFields(

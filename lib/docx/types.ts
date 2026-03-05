@@ -27,6 +27,8 @@ export interface DocumentData {
   title: string;
   /** サブタイトル（任意） */
   subtitle?: string;
+  /** 日付（任意） */
+  date?: string;
   /** セクション一覧 */
   sections: DocxSection[];
 }

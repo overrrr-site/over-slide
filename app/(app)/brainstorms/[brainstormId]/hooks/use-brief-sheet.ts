@@ -103,7 +103,7 @@ export function useBriefSheet({
               }),
               signal,
             }),
-          130_000
+          200_000
         );
 
         if (!res.ok) {

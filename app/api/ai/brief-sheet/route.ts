@@ -22,7 +22,7 @@ const briefSheetSchema = z.object({
   goal: z.string().describe("ゴール（成功の定義）。1〜3文。"),
   constraints: z.string().describe("制約条件（予算/期間/技術/NG事項）。箇条書きは使わず、スラッシュ区切りで1つの文字列にまとめること。"),
   research_topics: z.string().describe("リサーチで確認すべきこと（不確定要素のリスト）。番号付きで列挙、途中で打ち切らないこと。"),
-  structure_draft: z.string().describe("構成の骨格案（トーンに合わせた提案の流れ）。各セクションの見出しと1〜2文の説明を含め、必ず最後のセクションまで書き切ること。省略禁止。"),
+  structure_draft: z.string().describe("構成の骨格案（トーンに合わせた提案の流れ）。「1. セクション名：説明文」の番号付きリスト形式で、各セクションを改行で区切る。必ず最後のセクションまで書き切ること。省略禁止。"),
   reasoning_chain: z.string().describe("結論に至った思考の流れ。議論の中で方向性が変わった転換点を含め時系列で記述。"),
   rejected_alternatives: z.string().describe("検討したが却下した選択肢とその理由。「〇〇案→△△の理由で不採用」の形式。"),
   key_expressions: z.string().describe("議論中に生まれた印象的な表現・フレーズ。キャッチコピー候補、メタファー、パワーワードなどを列挙。"),
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
 
       const systemPrompt = buildBriefSheetPrompt(selectedTone);
       const prompt = `以下のチャット履歴からブリーフシートを生成してください:\n\n${historyText}${documentContext}`;
-      const { signal, cleanup } = createTimeoutController(120_000);
+      const { signal, cleanup } = createTimeoutController(180_000);
 
       try {
         const {
