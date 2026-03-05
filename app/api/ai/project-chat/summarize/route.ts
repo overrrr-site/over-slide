@@ -1,10 +1,13 @@
-import { generateText } from "ai";
 import { parseJsonBody } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/api/auth";
 import { withErrorHandling } from "@/lib/api/error";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { cachedGenerateText } from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
 import { WORKFLOW_STEPS } from "@/lib/utils/constants";
+import { getTeamIdForUser } from "@/lib/api/team";
 
 function getStepName(step: number): string {
   return WORKFLOW_STEPS.find((s) => s.id === step)?.name || `工程${step}`;
@@ -60,11 +63,28 @@ ${conversationText}
 - 箇条書きで構造化する
 - 「〜について議論しました」のような抽象的な記述は避け、具体的な決定事項を書く`;
 
-      const { text, usage } = await generateText({
+      const teamId = await getTeamIdForUser(supabase, user.id);
+      const {
+        text,
+        usage,
+        providerMetadata,
+        cacheHit,
+        cacheLayer,
+        cacheKeyPrefix,
+        requestFingerprintVersion,
+      } = await cachedGenerateText({
+        supabase,
+        teamId,
+        endpoint: "/api/ai/project-chat/summarize",
+        modelName: "claude-sonnet-4-5-20250929",
         model: sonnet,
         prompt,
         maxOutputTokens: 1024,
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        cacheMetadata: { step },
       });
+      const { cacheReadInputTokens, cacheCreationInputTokens } =
+        extractAnthropicCacheMetrics(providerMetadata);
 
       await recordAiUsage({
         supabase,
@@ -73,10 +93,19 @@ ${conversationText}
         model: "claude-sonnet-4-5-20250929",
         userId: user.id,
         projectId,
-        metadata: { step },
+        teamId,
         promptChars: prompt.length,
         completionChars: text.length,
         usage,
+        metadata: {
+          step,
+          cacheHit,
+          cacheLayer,
+          cacheKeyPrefix,
+          cacheReadInputTokens,
+          cacheCreationInputTokens,
+          requestFingerprintVersion,
+        },
       });
 
       // Upsert summary (one per project+step)

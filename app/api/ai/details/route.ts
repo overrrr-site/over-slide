@@ -1,9 +1,11 @@
 import { streamText } from "ai";
 import { parseJsonBody } from "@/lib/api/validation";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
-import { DETAILS_PROMPT, DOCUMENT_DETAILS_PROMPT } from "@/lib/ai/prompts/details";
+import { DETAILS_PROMPT } from "@/lib/ai/prompts/details";
 import { requireAuth } from "@/lib/api/auth";
 import { withErrorHandling } from "@/lib/api/error";
 import { searchKnowledge, formatRetrievedContext } from "@/lib/knowledge/retriever";
@@ -23,6 +25,8 @@ export async function POST(request: Request) {
       // useChat's DefaultChatTransport sends data inside messages array
       let structure = body.structure || null;
       let researchMemo = body.researchMemo || "";
+      let discussionNote = body.discussionNote || "";
+      let keyExpressions = body.keyExpressions || "";
 
       if (!structure && body.messages?.length) {
         const lastUserMsg = [...body.messages]
@@ -43,39 +47,29 @@ export async function POST(request: Request) {
             const parsed = JSON.parse(msgText);
             structure = parsed.structure || structure;
             researchMemo = parsed.researchMemo || researchMemo;
+            discussionNote = parsed.discussionNote || discussionNote;
+            keyExpressions = parsed.keyExpressions || keyExpressions;
           } catch {
             // Not JSON — use as-is
           }
         }
       }
 
-      // output_type と確定済みメッセージを取得
-      let outputType = "slide";
+      // 確定済みメッセージを取得
       let confirmedMessages: { page_number: number; message: string }[] = [];
 
       if (projectId) {
-        const [projectResult, structureResult] = await Promise.all([
-          supabase
-            .from("projects")
-            .select("output_type")
-            .eq("id", projectId)
-            .single(),
-          supabase
-            .from("structures")
-            .select("pages")
-            .eq("project_id", projectId)
-            .order("version", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-        ]);
-
-        if (projectResult.data?.output_type) {
-          outputType = projectResult.data.output_type;
-        }
+        const { data: structureData } = await supabase
+          .from("structures")
+          .select("pages")
+          .eq("project_id", projectId)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
         // 構成の各ページから確定済み message を抽出
-        if (structureResult.data?.pages && Array.isArray(structureResult.data.pages)) {
-          confirmedMessages = (structureResult.data.pages as Array<{ page_number: number; message?: string }>)
+        if (structureData?.pages && Array.isArray(structureData.pages)) {
+          confirmedMessages = (structureData.pages as Array<{ page_number: number; message?: string }>)
             .filter((p) => p.message)
             .map((p) => ({ page_number: p.page_number, message: p.message! }));
         }
@@ -101,16 +95,16 @@ export async function POST(request: Request) {
         ? confirmedMessages.map((m) => `P${m.page_number}: ${m.message}`).join("\n")
         : "";
 
-      const systemPrompt = outputType === "document"
-        ? DOCUMENT_DETAILS_PROMPT
-        : DETAILS_PROMPT;
+      const systemPrompt = DETAILS_PROMPT;
 
       const prompt = [
         `<input>`,
-        `<output_type>${outputType === "document" ? "ドキュメント" : "スライド"}</output_type>`,
+        `<output_type>スライド</output_type>`,
         `<structure>\n${compactJsonForPrompt(structure)}\n</structure>`,
         messagesSection ? `<confirmed_messages>\n${messagesSection}\n</confirmed_messages>` : "",
         researchMemo ? `<research_memo>\n${researchMemo}\n</research_memo>` : "",
+        discussionNote ? `<discussion_note>\n${discussionNote}\n</discussion_note>` : "",
+        keyExpressions ? `<key_expressions>\n${keyExpressions}\n</key_expressions>` : "",
         ragContext ? `<knowledge_base>\n${ragContext}\n</knowledge_base>` : "",
         `</input>`,
         "",
@@ -123,7 +117,10 @@ export async function POST(request: Request) {
         model: sonnet,
         system: systemPrompt,
         prompt,
-        async onFinish({ text, totalUsage }) {
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        async onFinish({ text, totalUsage, providerMetadata }) {
+          const { cacheReadInputTokens, cacheCreationInputTokens } =
+            extractAnthropicCacheMetrics(providerMetadata);
           await recordAiUsage({
             supabase,
             endpoint: "/api/ai/details",
@@ -135,6 +132,10 @@ export async function POST(request: Request) {
             promptChars: prompt.length,
             completionChars: text.length,
             usage: totalUsage,
+            metadata: {
+              cacheReadInputTokens,
+              cacheCreationInputTokens,
+            },
           });
 
           if (!projectId) return;

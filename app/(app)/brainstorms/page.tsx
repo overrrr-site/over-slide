@@ -63,9 +63,6 @@ export default async function BrainstormsPage() {
                   </div>
                   <Badge variant={status.variant}>{status.label}</Badge>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-text-secondary">ブリーフ作成・出力・企画書昇格</p>
-                </CardContent>
                 <CardFooter className="justify-between">
                   <span>{new Date(session.updated_at).toLocaleDateString("ja-JP")}</span>
                   <BrainstormActions brainstormId={session.id} />

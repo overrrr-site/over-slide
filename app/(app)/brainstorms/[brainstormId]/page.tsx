@@ -8,11 +8,10 @@ import { useAbortableAction } from "@/hooks/use-abortable-action";
 import type {
   BriefSheetData,
   DiscussionChatMessage,
-  DiscussionMode,
   SimpleDiscussionMessage,
 } from "./types";
 import { getMessageText } from "./utils";
-import { ModeSelector } from "./components/mode-selector";
+import { DISCUSSION_MODES } from "./constants";
 import { CoverageTracker } from "./components/coverage-tracker";
 import { ToneSelector } from "./components/tone-selector";
 import { SingleChatSection } from "./components/single-chat-section";
@@ -62,27 +61,22 @@ export default function BrainstormDetailPage() {
   const [exportingDocx, setExportingDocx] = useState(false);
   const [handingOff, setHandingOff] = useState(false);
 
-  const [currentMode, setCurrentMode] = useState<DiscussionMode>("draw_out");
-
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/ai/discussion",
-        body: { brainstormId, mode: currentMode },
+        body: { brainstormId },
       }),
-    [brainstormId, currentMode]
+    [brainstormId]
   );
 
   const { messages, sendMessage, setMessages, status: chatStatus } = useChat({ transport });
   const isStreaming = chatStatus === "streaming" || chatStatus === "submitted";
   const chatMessages = messages as unknown as DiscussionChatMessage[];
 
-  const { suggestedMode, coverageStatus, acceptSuggestion, dismissSuggestion } =
-    useDiscussionMode({
-      messages: chatMessages,
-      currentMode,
-      onModeChange: setCurrentMode,
-    });
+  const { currentPhase, coverageStatus } = useDiscussionMode({
+    messages: chatMessages,
+  });
 
   const {
     briefSheet,
@@ -125,6 +119,10 @@ export default function BrainstormDetailPage() {
         research_topics: data.session.research_topics || "",
         structure_draft: data.session.structure_draft || "",
         raw_markdown: data.session.raw_markdown || "",
+        reasoning_chain: data.session.reasoning_chain || "",
+        rejected_alternatives: data.session.rejected_alternatives || "",
+        key_expressions: data.session.key_expressions || "",
+        discussion_note: data.session.discussion_note || "",
       };
       setBriefSheet(nextBrief);
 
@@ -191,6 +189,10 @@ export default function BrainstormDetailPage() {
           constraints: briefSheet.constraints,
           research_topics: briefSheet.research_topics,
           structure_draft: briefSheet.structure_draft,
+          reasoning_chain: briefSheet.reasoning_chain,
+          rejected_alternatives: briefSheet.rejected_alternatives,
+          key_expressions: briefSheet.key_expressions,
+          discussion_note: briefSheet.discussion_note,
         }),
       });
       if (res.ok) {
@@ -205,6 +207,10 @@ export default function BrainstormDetailPage() {
             research_topics: data.session.research_topics || "",
             structure_draft: data.session.structure_draft || "",
             raw_markdown: data.session.raw_markdown || "",
+            reasoning_chain: data.session.reasoning_chain || "",
+            rejected_alternatives: data.session.rejected_alternatives || "",
+            key_expressions: data.session.key_expressions || "",
+            discussion_note: data.session.discussion_note || "",
           });
         }
       }
@@ -242,13 +248,13 @@ export default function BrainstormDetailPage() {
     }
   };
 
-  const handleHandoff = async (outputType: "slide" | "document") => {
+  const handleHandoff = async () => {
     setHandingOff(true);
     try {
       const res = await fetch(`/api/brainstorms/${brainstormId}/handoff`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, clientName, outputType }),
+        body: JSON.stringify({ title, clientName }),
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -350,6 +356,9 @@ export default function BrainstormDetailPage() {
     [chatMessages]
   );
 
+  const currentPhaseLabel = DISCUSSION_MODES.find((m) => m.key === currentPhase)?.label || "引き出し";
+  const currentPhaseColor = DISCUSSION_MODES.find((m) => m.key === currentPhase)?.color || "bg-blue-500";
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-beige bg-white px-4 py-3">
@@ -393,13 +402,19 @@ export default function BrainstormDetailPage() {
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col">
-          <ModeSelector currentMode={currentMode} onChangeMode={setCurrentMode} />
+          {/* フェーズ表示（読み取り専用） */}
+          <div className="flex items-center gap-2 border-b border-beige bg-white px-4 py-2">
+            <span className="text-xs text-text-secondary">フェーズ:</span>
+            <span className={`rounded-md ${currentPhaseColor} px-3 py-1 text-xs font-medium text-white`}>
+              {currentPhaseLabel}
+            </span>
+          </div>
 
-          {currentMode === "draw_out" && (
+          {currentPhase === "draw_out" && (
             <CoverageTracker coverageStatus={coverageStatus} />
           )}
 
-          {currentMode === "structure" && (
+          {currentPhase === "structure" && (
             <ToneSelector currentTone={briefTone} onChangeTone={setBriefTone} />
           )}
 
@@ -408,7 +423,6 @@ export default function BrainstormDetailPage() {
             isStreaming={isStreaming}
             inputValue={inputValue}
             generatingBrief={generatingBrief}
-            suggestedMode={suggestedMode}
             messagesEndRef={messagesEndRef}
             uploadedFiles={uploadedFiles}
             uploading={uploading}
@@ -420,8 +434,6 @@ export default function BrainstormDetailPage() {
             onFileDelete={handleFileDelete}
             onGenerateBriefSheet={() => generateBriefSheet()}
             onCompleteDiscussion={handleComplete}
-            onAcceptSuggestion={acceptSuggestion}
-            onDismissSuggestion={dismissSuggestion}
           />
         </div>
 

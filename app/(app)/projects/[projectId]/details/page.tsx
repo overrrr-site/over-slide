@@ -13,10 +13,11 @@ export default function DetailsPage() {
   const router = useRouter();
   const [structure, setStructure] = useState<unknown>(null);
   const [researchMemo, setResearchMemo] = useState("");
+  const [discussionNote, setDiscussionNote] = useState("");
+  const [keyExpressions, setKeyExpressions] = useState("");
   const [pageContents, setPageContents] = useState<Record<string, unknown>[]>([]);
   const [generating, setGenerating] = useState(false);
   const [progressCount, setProgressCount] = useState(0);
-  const [outputType, setOutputType] = useState<string>("slide");
 
   const { registerApplyHandler, summarizeCurrentStep } = useProjectChat();
 
@@ -55,7 +56,7 @@ export default function DetailsPage() {
     const load = async () => {
       const supabase = createClient();
 
-      const [memoResult, structureResult, projectResult] = await Promise.all([
+      const [memoResult, structureResult, briefResult] = await Promise.all([
         supabase
           .from("research_memos")
           .select("raw_markdown")
@@ -69,18 +70,20 @@ export default function DetailsPage() {
           .limit(1)
           .maybeSingle(),
         supabase
-          .from("projects")
-          .select("output_type")
-          .eq("id", projectId)
-          .single(),
+          .from("brief_sheets")
+          .select("discussion_note, key_expressions")
+          .eq("project_id", projectId)
+          .maybeSingle(),
       ]);
 
       if (memoResult.data?.raw_markdown)
         setResearchMemo(memoResult.data.raw_markdown);
       if (structureResult.data?.pages)
         setStructure(structureResult.data.pages);
-      if (projectResult.data?.output_type)
-        setOutputType(projectResult.data.output_type);
+      if (briefResult.data?.discussion_note)
+        setDiscussionNote(briefResult.data.discussion_note);
+      if (briefResult.data?.key_expressions)
+        setKeyExpressions(briefResult.data.key_expressions);
 
       // Load existing page_contents from DB (same pattern as design page)
       if (structureResult.data?.id) {
@@ -132,10 +135,10 @@ export default function DetailsPage() {
     setGenerating(true);
     setProgressCount(0);
     sendMessage({
-      text: JSON.stringify({ structure, researchMemo }),
+      text: JSON.stringify({ structure, researchMemo, discussionNote, keyExpressions }),
     });
     setGenerating(false);
-  }, [structure, researchMemo, sendMessage]);
+  }, [structure, researchMemo, discussionNote, keyExpressions, sendMessage]);
 
   const completeDetails = async () => {
     await summarizeCurrentStep();
@@ -204,11 +207,9 @@ export default function DetailsPage() {
                     <span className="rounded bg-navy/10 px-1.5 py-0.5 text-xs font-medium text-navy">
                       P{pageNum}
                     </span>
-                    {outputType !== "document" && (
-                      <span className="rounded bg-green/10 px-1.5 py-0.5 text-xs font-medium text-green">
-                        {page.master_type as string}
-                      </span>
-                    )}
+                    <span className="rounded bg-green/10 px-1.5 py-0.5 text-xs font-medium text-green">
+                      {page.master_type as string}
+                    </span>
                     <h3 className="text-sm font-medium text-navy truncate">
                       {page.title as string}
                     </h3>

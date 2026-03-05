@@ -1,7 +1,7 @@
 import { opus, gemini, gpt } from "@/lib/ai/anthropic";
 import { parseJsonBody } from "@/lib/api/validation";
 import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
-import { CONTENT_REVIEW_PROMPT, DOCUMENT_CONTENT_REVIEW_PROMPT } from "@/lib/ai/prompts/content-review";
+import { CONTENT_REVIEW_PROMPT } from "@/lib/ai/prompts/content-review";
 import { runParallelReviews, type ReviewModelConfig } from "@/lib/ai/parallel-review";
 import { requireAuth } from "@/lib/api/auth";
 import { getTeamIdForUser } from "@/lib/api/team";
@@ -42,23 +42,6 @@ export async function POST(request: Request) {
         deepMode = false,
         selectedModels,
       } = await parseJsonBody(request);
-
-      // output_type に応じてレビュープロンプトを切り替え
-      let outputType = "slide";
-      if (projectId) {
-        try {
-          const { data: projectData } = await supabase
-            .from("projects")
-            .select("output_type")
-            .eq("id", projectId)
-            .single();
-          if (projectData?.output_type) {
-            outputType = projectData.output_type;
-          }
-        } catch {
-          // Non-critical - fallback to slide
-        }
-      }
 
       const teamId = await getTeamIdForUser(supabase, user.id);
       if (!teamId) {
@@ -109,7 +92,7 @@ export async function POST(request: Request) {
         projectId,
         endpoint: "/api/ai/content-review/parallel",
         prompt,
-        system: outputType === "document" ? DOCUMENT_CONTENT_REVIEW_PROMPT : CONTENT_REVIEW_PROMPT,
+        system: CONTENT_REVIEW_PROMPT,
         models: modelsToRun,
       });
 

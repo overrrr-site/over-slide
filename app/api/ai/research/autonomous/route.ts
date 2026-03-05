@@ -1,10 +1,15 @@
-import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { parseJsonWithSchema } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/api/auth";
 import { withErrorHandling } from "@/lib/api/error";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import {
+  cachedGenerateObject,
+  cachedGenerateText,
+} from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
 import {
   RESEARCH_MEMO_PROMPT,
@@ -171,12 +176,28 @@ export async function POST(request: Request) {
           ? `${promptContext}\n\n${knowledge.context}`
           : promptContext;
 
-        const { text, usage } = await generateText({
+        const {
+          text,
+          usage,
+          providerMetadata,
+          cacheHit,
+          cacheLayer,
+          cacheKeyPrefix,
+          requestFingerprintVersion,
+        } = await cachedGenerateText({
+          supabase,
+          teamId: profile.team_id,
+          endpoint: "/api/ai/research/autonomous",
+          modelName: "claude-sonnet-4-5-20250929",
           model: sonnet,
           system: RESEARCH_MEMO_PROMPT,
           prompt: `以下の情報をもとにリサーチメモを更新してください。\n\n${promptContextWithKnowledge}`,
           maxOutputTokens: 4096,
+          providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+          cacheMetadata: { stage: "memo", iteration },
         });
+        const { cacheReadInputTokens, cacheCreationInputTokens } =
+          extractAnthropicCacheMetrics(providerMetadata);
 
         await recordAiUsage({
           supabase,
@@ -188,7 +209,17 @@ export async function POST(request: Request) {
           promptChars: promptContextWithKnowledge.length,
           completionChars: text.length,
           usage,
-          metadata: { stage: "memo", iteration, kb_chunks: knowledge.chunkCount },
+          metadata: {
+            stage: "memo",
+            iteration,
+            kb_chunks: knowledge.chunkCount,
+            cacheHit,
+            cacheLayer,
+            cacheKeyPrefix,
+            cacheReadInputTokens,
+            cacheCreationInputTokens,
+            requestFingerprintVersion,
+          },
         });
 
         memoText = text.trim();
@@ -223,13 +254,31 @@ export async function POST(request: Request) {
           .filter(Boolean)
           .join("\n\n");
 
-        const { object: queryObject, usage: queryUsage } = await generateObject({
+        const {
+          object: queryObject,
+          usage: queryUsage,
+          providerMetadata: queryProviderMetadata,
+          cacheHit: queryCacheHit,
+          cacheLayer: queryCacheLayer,
+          cacheKeyPrefix: queryCacheKeyPrefix,
+          requestFingerprintVersion: queryFingerprintVersion,
+        } = await cachedGenerateObject<z.infer<typeof querySchema>>({
+          supabase,
+          teamId: profile.team_id,
+          endpoint: "/api/ai/research/autonomous",
+          modelName: "claude-sonnet-4-5-20250929",
           model: sonnet,
           schema: querySchema,
           system: RESEARCH_QUERY_PROMPT,
           prompt: queryPrompt,
           maxOutputTokens: 2048,
+          providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+          cacheMetadata: { stage: "query", iteration },
         });
+        const {
+          cacheReadInputTokens: queryCacheReadInputTokens,
+          cacheCreationInputTokens: queryCacheCreationInputTokens,
+        } = extractAnthropicCacheMetrics(queryProviderMetadata);
 
         await recordAiUsage({
           supabase,
@@ -241,7 +290,16 @@ export async function POST(request: Request) {
           promptChars: queryPrompt.length,
           completionChars: JSON.stringify(queryObject).length,
           usage: queryUsage,
-          metadata: { stage: "query", iteration },
+          metadata: {
+            stage: "query",
+            iteration,
+            cacheHit: queryCacheHit,
+            cacheLayer: queryCacheLayer,
+            cacheKeyPrefix: queryCacheKeyPrefix,
+            cacheReadInputTokens: queryCacheReadInputTokens,
+            cacheCreationInputTokens: queryCacheCreationInputTokens,
+            requestFingerprintVersion: queryFingerprintVersion,
+          },
         });
 
         const queryCandidates = queryObject.queries

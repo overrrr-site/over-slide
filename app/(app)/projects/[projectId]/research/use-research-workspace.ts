@@ -20,9 +20,12 @@ import {
 import { mergeMemoSections } from "@/lib/research/memo-section-merger";
 import {
   normalizeKeywordTextToQueries,
-  parseResearchTopicsToQueries,
   type TopicQuerySuggestion,
 } from "@/lib/research/topic-queries";
+import {
+  parseQueryPresetMeta,
+  type QueryPresetSource,
+} from "@/lib/research/query-preset";
 import type {
   ActiveRequestMode,
   AutonomousIteration,
@@ -30,6 +33,13 @@ import type {
   MemoChatMessage,
   SearchResult,
 } from "./research-types";
+
+interface ResearchMemoContent {
+  chat_history?: unknown[];
+  latest_instruction?: string | null;
+  query_preset?: unknown;
+  [key: string]: unknown;
+}
 
 export function useResearchWorkspace() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -61,6 +71,7 @@ export function useResearchWorkspace() {
 
   const [aiSuggestions, setAiSuggestions] = useState<TopicQuerySuggestion[]>([]);
   const [suggestingKeywords, setSuggestingKeywords] = useState(false);
+  const briefUpdatedAtRef = useRef<string | null>(null);
 
   const transport = useMemo(
     () =>
@@ -75,10 +86,6 @@ export function useResearchWorkspace() {
   const briefMarkdown = useMemo(
     () => buildBriefSheetMarkdown(briefFields),
     [briefFields]
-  );
-  const topicSuggestions = useMemo(
-    () => parseResearchTopicsToQueries(briefFields.research_topics),
-    [briefFields.research_topics]
   );
   const addedQueries = useMemo(() => {
     return new Set(extractQueriesFromKeywords(keywords));
@@ -111,14 +118,100 @@ export function useResearchWorkspace() {
     setKeywords((prev) => mergeKeywordText(prev, queries));
   }, []);
 
+  const requestKeywordSuggestions = useCallback(
+    async (params: {
+      source: QueryPresetSource;
+      persistPreset: boolean;
+      briefSheet: string;
+      researchTopics: string;
+      existingKeywords: string;
+      briefUpdatedAt: string | null;
+      showFailureNotice: boolean;
+    }) => {
+      setSuggestingKeywords(true);
+      try {
+        const res = await fetch("/api/ai/suggest-keywords", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId,
+            briefSheet: params.briefSheet,
+            researchTopics: params.researchTopics,
+            source: params.source,
+            persistPreset: params.persistPreset,
+            existingKeywords: params.existingKeywords,
+            briefUpdatedAt: params.briefUpdatedAt ?? undefined,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            typeof data.error === "string"
+              ? data.error
+              : "キーワード候補の生成に失敗しました"
+          );
+        }
+
+        const suggestions: TopicQuerySuggestion[] = Array.isArray(data.queries)
+          ? data.queries
+              .map((item: unknown) => {
+                if (!item || typeof item !== "object") return null;
+                const row = item as Partial<TopicQuerySuggestion>;
+                if (typeof row.query !== "string" || !row.query.trim()) return null;
+                return {
+                  query: row.query.trim(),
+                  purpose: typeof row.purpose === "string" ? row.purpose : "",
+                  source: typeof row.source === "string" ? row.source : undefined,
+                } satisfies TopicQuerySuggestion;
+              })
+              .filter(
+                (item: TopicQuerySuggestion | null): item is TopicQuerySuggestion =>
+                  item !== null
+              )
+          : [];
+
+        setAiSuggestions(suggestions);
+
+        if (typeof data.keywords === "string") {
+          setKeywords(normalizeKeywordTextToQueries(data.keywords));
+        } else {
+          appendQueriesToKeywords(suggestions.map((item) => item.query));
+        }
+
+        return {
+          ok: true as const,
+          addedCount:
+            typeof data.addedQueryCount === "number" ? data.addedQueryCount : null,
+        };
+      } catch (error) {
+        if (params.showFailureNotice) {
+          setBriefNotice(
+            "クエリの自動生成に失敗しました。『AIでクエリ再生成』で再試行してください"
+          );
+        }
+        return {
+          ok: false as const,
+          error:
+            error instanceof Error ? error.message : "キーワード候補の生成に失敗しました",
+        };
+      } finally {
+        setSuggestingKeywords(false);
+      }
+    },
+    [appendQueriesToKeywords, projectId]
+  );
+
   useEffect(() => {
+    let cancelled = false;
+
     const load = async () => {
       const supabase = createClient();
       const [briefResult, memoResult] = await Promise.all([
         supabase
           .from("brief_sheets")
           .select(
-            "client_info, background, hypothesis, goal, constraints, research_topics, structure_draft"
+            "client_info, background, hypothesis, goal, constraints, research_topics, structure_draft, reasoning_chain, rejected_alternatives, key_expressions, discussion_note, raw_markdown, updated_at"
           )
           .eq("project_id", projectId)
           .single(),
@@ -128,6 +221,8 @@ export function useResearchWorkspace() {
           .eq("project_id", projectId)
           .single(),
       ]);
+
+      if (cancelled) return;
 
       let loadedKeywords = "";
       let normalizedStoredKeywords = "";
@@ -140,15 +235,22 @@ export function useResearchWorkspace() {
         loadedKeywords = normalizedStoredKeywords;
       }
 
-      if (briefResult.data) {
-        const normalized = normalizeBriefFields(briefResult.data);
-        setBriefFields(normalized);
-        loadedKeywords = mergeKeywordText(
-          loadedKeywords,
-          parseResearchTopicsToQueries(normalized.research_topics).map(
-            (item) => item.query
-          )
-        );
+      const briefData = briefResult.data ? normalizeBriefFields(briefResult.data) : null;
+      const loadedBriefMarkdown =
+        typeof briefResult.data?.raw_markdown === "string" &&
+        briefResult.data.raw_markdown.trim()
+          ? briefResult.data.raw_markdown
+          : briefData
+            ? buildBriefSheetMarkdown(briefData)
+            : "";
+      const briefUpdatedAt =
+        typeof briefResult.data?.updated_at === "string"
+          ? briefResult.data.updated_at
+          : null;
+      briefUpdatedAtRef.current = briefUpdatedAt;
+
+      if (briefData) {
+        setBriefFields(briefData);
       }
 
       if (memoResult.data?.raw_markdown) {
@@ -171,8 +273,13 @@ export function useResearchWorkspace() {
           .eq("project_id", projectId);
       }
 
-      const storedHistory = (memoResult.data?.content as { chat_history?: unknown[] } | null)
-        ?.chat_history;
+      const memoContent: ResearchMemoContent =
+        memoResult.data?.content && typeof memoResult.data.content === "object"
+          ? (memoResult.data.content as ResearchMemoContent)
+          : {};
+      const queryPreset = parseQueryPresetMeta(memoContent.query_preset);
+
+      const storedHistory = memoContent.chat_history;
       if (Array.isArray(storedHistory)) {
         const normalizedHistory = storedHistory
           .map((row) => {
@@ -196,9 +303,34 @@ export function useResearchWorkspace() {
           .filter((item): item is MemoChatMessage => item !== null);
         setChatHistory(normalizedHistory);
       }
+
+      const shouldAutoPreset =
+        !!loadedBriefMarkdown.trim() &&
+        (!loadedKeywords.trim() ||
+          !queryPreset ||
+          queryPreset.status === "failed" ||
+          (briefUpdatedAt &&
+            queryPreset.brief_updated_at !== briefUpdatedAt));
+
+      if (shouldAutoPreset) {
+        await requestKeywordSuggestions({
+          source: "research_init",
+          persistPreset: true,
+          briefSheet: loadedBriefMarkdown,
+          researchTopics: briefData?.research_topics || "",
+          existingKeywords: loadedKeywords,
+          briefUpdatedAt,
+          showFailureNotice: true,
+        });
+      }
+
     };
     void load();
-  }, [projectId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, requestKeywordSuggestions]);
 
   const updateBriefField = useCallback((field: keyof BriefSheetFields, value: string) => {
     setBriefNotice(null);
@@ -210,7 +342,7 @@ export function useResearchWorkspace() {
     setBriefNotice(null);
 
     const supabase = createClient();
-    const { error: saveError } = await supabase
+    const { data: savedBrief, error: saveError } = await supabase
       .from("brief_sheets")
       .upsert(
         {
@@ -219,66 +351,82 @@ export function useResearchWorkspace() {
           raw_markdown: briefMarkdown,
         },
         { onConflict: "project_id" }
-      );
+      )
+      .select("updated_at")
+      .single();
 
     if (saveError) {
       setBriefNotice("ブリーフシートの保存に失敗しました");
     } else {
-      appendQueriesToKeywords(
-        parseResearchTopicsToQueries(briefFields.research_topics).map(
-          (item) => item.query
-        )
-      );
-      setBriefNotice("ブリーフシートを保存しました");
+      const nextBriefUpdatedAt =
+        typeof savedBrief?.updated_at === "string"
+          ? savedBrief.updated_at
+          : new Date().toISOString();
+      briefUpdatedAtRef.current = nextBriefUpdatedAt;
+
+      const result = await requestKeywordSuggestions({
+        source: "brief_save",
+        persistPreset: true,
+        briefSheet: briefMarkdown,
+        researchTopics: briefFields.research_topics,
+        existingKeywords: keywords,
+        briefUpdatedAt: nextBriefUpdatedAt,
+        showFailureNotice: false,
+      });
+
+      if (result.ok) {
+        const added = typeof result.addedCount === "number" ? result.addedCount : 0;
+        setBriefNotice(
+          added > 0
+            ? `ブリーフを保存し、クエリを${added}件追加しました`
+            : "ブリーフを保存しました（追加クエリなし）"
+        );
+      } else {
+        setBriefNotice(
+          "ブリーフは保存しましたが、クエリ再生成に失敗しました。『AIでクエリ再生成』で再試行してください"
+        );
+      }
     }
 
     setSavingBrief(false);
-  }, [appendQueriesToKeywords, briefFields, briefMarkdown, projectId]);
+  }, [
+    briefFields,
+    briefMarkdown,
+    keywords,
+    projectId,
+    requestKeywordSuggestions,
+  ]);
 
   const handleSuggestKeywords = useCallback(async () => {
-    setSuggestingKeywords(true);
+    setBriefNotice(null);
     setMemoNotice(null);
-    try {
-      const res = await fetch("/api/ai/suggest-keywords", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId,
-          briefSheet: briefMarkdown,
-          researchTopics: briefFields.research_topics,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.queries)) {
-          const suggestions: TopicQuerySuggestion[] = data.queries
-            .map((item: unknown) => {
-              if (!item || typeof item !== "object") return null;
-              const row = item as Partial<TopicQuerySuggestion>;
-              if (typeof row.query !== "string" || !row.query.trim()) return null;
-              return {
-                query: row.query.trim(),
-                purpose: typeof row.purpose === "string" ? row.purpose : "",
-                source: typeof row.source === "string" ? row.source : undefined,
-              } satisfies TopicQuerySuggestion;
-            })
-            .filter(
-              (item: TopicQuerySuggestion | null): item is TopicQuerySuggestion =>
-                item !== null
-            );
+    const result = await requestKeywordSuggestions({
+      source: "manual",
+      persistPreset: true,
+      briefSheet: briefMarkdown,
+      researchTopics: briefFields.research_topics,
+      existingKeywords: keywords,
+      briefUpdatedAt: briefUpdatedAtRef.current,
+      showFailureNotice: true,
+    });
 
-          setAiSuggestions(suggestions);
-          appendQueriesToKeywords(suggestions.map((item) => item.query));
-        }
-      }
-    } catch {
-      // エラー時は何もしない
+    if (result.ok) {
+      const added = typeof result.addedCount === "number" ? result.addedCount : 0;
+      setBriefNotice(
+        added > 0
+          ? `AIでクエリを再生成し、${added}件追加しました`
+          : "AIでクエリを再生成しました（追加クエリなし）"
+      );
     }
-    setSuggestingKeywords(false);
-  }, [appendQueriesToKeywords, briefFields.research_topics, briefMarkdown, projectId]);
+  }, [
+    briefFields.research_topics,
+    briefMarkdown,
+    keywords,
+    requestKeywordSuggestions,
+  ]);
 
   const handleSearch = useCallback(async () => {
-    const queries = queryList.slice(0, 10);
+    const queries = queryList.slice(0, 15);
     if (!queries.length) return;
     setSearching(true);
     setMemoNotice(null);
@@ -433,6 +581,16 @@ export function useResearchWorkspace() {
     ): Promise<boolean> => {
       const normalizedKeywords = normalizeKeywordTextToQueries(keywords);
       const supabase = createClient();
+      const { data: existingMemo } = await supabase
+        .from("research_memos")
+        .select("content")
+        .eq("project_id", projectId)
+        .single();
+      const existingContent =
+        existingMemo?.content && typeof existingMemo.content === "object"
+          ? (existingMemo.content as Record<string, unknown>)
+          : {};
+
       const { error: saveError } = await supabase.from("research_memos").upsert(
         {
           project_id: projectId,
@@ -441,6 +599,7 @@ export function useResearchWorkspace() {
           search_results: searchResults,
           raw_markdown: markdown,
           content: {
+            ...existingContent,
             chat_history: history,
             latest_instruction: latestInstruction,
           },
@@ -659,7 +818,6 @@ export function useResearchWorkspace() {
     aiSuggestions,
     suggestingKeywords,
     briefMarkdown,
-    topicSuggestions,
     addedQueries,
     queryList,
     streamingMemoText,

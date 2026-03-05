@@ -7,6 +7,10 @@ export interface BriefSheetData {
   research_topics: string;
   structure_draft: string;
   raw_markdown: string;
+  reasoning_chain?: string;
+  rejected_alternatives?: string;
+  key_expressions?: string;
+  discussion_note?: string;
 }
 
 export type DiscussionMode = "draw_out" | "challenge" | "expand" | "structure";

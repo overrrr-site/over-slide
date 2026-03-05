@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseJsonWithSchema } from "@/lib/api/validation";
-import { generateObject } from "ai";
 import { z } from "zod";
 import { opus } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { cachedGenerateObject } from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
 import { buildBriefSheetPrompt } from "@/lib/ai/prompts/brief-sheet";
 import { requireAuth } from "@/lib/api/auth";
@@ -21,6 +23,10 @@ const briefSheetSchema = z.object({
   constraints: z.string().describe("制約条件（予算/期間/技術/NG事項）。箇条書きは使わず、スラッシュ区切りで1つの文字列にまとめること。"),
   research_topics: z.string().describe("リサーチで確認すべきこと（不確定要素のリスト）。番号付きで列挙、途中で打ち切らないこと。"),
   structure_draft: z.string().describe("構成の骨格案（トーンに合わせた提案の流れ）。各セクションの見出しと1〜2文の説明を含め、必ず最後のセクションまで書き切ること。省略禁止。"),
+  reasoning_chain: z.string().describe("結論に至った思考の流れ。議論の中で方向性が変わった転換点を含め時系列で記述。"),
+  rejected_alternatives: z.string().describe("検討したが却下した選択肢とその理由。「〇〇案→△△の理由で不採用」の形式。"),
+  key_expressions: z.string().describe("議論中に生まれた印象的な表現・フレーズ。キャッチコピー候補、メタファー、パワーワードなどを列挙。"),
+  discussion_note: z.string().describe("議論全体を物語形式でまとめた要約。何を話し、どう結論に至り、何を外したかを200〜400文字で。"),
 });
 
 const briefSheetRequestSchema = z
@@ -106,14 +112,34 @@ export async function POST(request: NextRequest) {
       const { signal, cleanup } = createTimeoutController(120_000);
 
       try {
-        const { object: briefSheet, usage } = await generateObject({
+        const {
+          object: briefSheet,
+          usage,
+          providerMetadata,
+          cacheHit,
+          cacheLayer,
+          cacheKeyPrefix,
+          requestFingerprintVersion,
+        } = await cachedGenerateObject<z.infer<typeof briefSheetSchema>>({
+          supabase,
+          teamId: auth.profile.team_id,
+          endpoint: "/api/ai/brief-sheet",
+          modelName: "claude-opus-4-6",
           model: opus,
           schema: briefSheetSchema,
           system: systemPrompt,
           prompt,
           maxOutputTokens: 16384,
           abortSignal: signal,
+          providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+          cacheMetadata: {
+            brainstormId,
+            projectId,
+            tone: selectedTone,
+          },
         });
+        const { cacheReadInputTokens, cacheCreationInputTokens } =
+          extractAnthropicCacheMetrics(providerMetadata);
 
         const promptChars = systemPrompt.length + prompt.length;
         const completionChars = JSON.stringify(briefSheet).length;
@@ -125,10 +151,18 @@ export async function POST(request: NextRequest) {
           model: "claude-opus-4-6",
           userId: user.id,
           projectId,
-          metadata: brainstormId ? { brainstorm_id: brainstormId } : {},
           promptChars,
           completionChars,
           usage,
+          metadata: {
+            ...(brainstormId ? { brainstorm_id: brainstormId } : {}),
+            cacheHit,
+            cacheLayer,
+            cacheKeyPrefix,
+            cacheReadInputTokens,
+            cacheCreationInputTokens,
+            requestFingerprintVersion,
+          },
         });
 
         // raw_markdown をフィールドから自動生成
@@ -140,6 +174,10 @@ export async function POST(request: NextRequest) {
           constraints: briefSheet.constraints,
           research_topics: briefSheet.research_topics,
           structure_draft: briefSheet.structure_draft,
+          reasoning_chain: briefSheet.reasoning_chain,
+          rejected_alternatives: briefSheet.rejected_alternatives,
+          key_expressions: briefSheet.key_expressions,
+          discussion_note: briefSheet.discussion_note,
         });
         const result = { ...briefSheet, raw_markdown: rawMarkdown };
 
@@ -156,6 +194,10 @@ export async function POST(request: NextRequest) {
               constraints: briefSheet.constraints,
               research_topics: briefSheet.research_topics,
               structure_draft: briefSheet.structure_draft,
+              reasoning_chain: briefSheet.reasoning_chain,
+              rejected_alternatives: briefSheet.rejected_alternatives,
+              key_expressions: briefSheet.key_expressions,
+              discussion_note: briefSheet.discussion_note,
               raw_markdown: rawMarkdown,
               chat_history: chatHistory,
               brief_tone: selectedTone,
@@ -176,6 +218,10 @@ export async function POST(request: NextRequest) {
                 constraints: briefSheet.constraints,
                 research_topics: briefSheet.research_topics,
                 structure_draft: briefSheet.structure_draft,
+                reasoning_chain: briefSheet.reasoning_chain,
+                rejected_alternatives: briefSheet.rejected_alternatives,
+                key_expressions: briefSheet.key_expressions,
+                discussion_note: briefSheet.discussion_note,
                 raw_markdown: rawMarkdown,
                 chat_history: chatHistory,
               },

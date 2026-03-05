@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertInput, parseJsonBody } from "@/lib/api/validation";
-import { generateText } from "ai";
 import { opus } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { cachedGenerateText } from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { parseJsonObjectFromText } from "@/lib/ai/json-response";
 import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
 import { patchByPageNumber, type NumberedPatch } from "@/lib/ai/diff-patch";
@@ -122,12 +124,28 @@ JSONのみ出力し、説明文は不要です。
   ]
 }${ragContext}`;
 
-        const { text, usage } = await generateText({
+        const {
+          text,
+          usage,
+          providerMetadata,
+          cacheHit,
+          cacheLayer,
+          cacheKeyPrefix,
+          requestFingerprintVersion,
+        } = await cachedGenerateText({
+          supabase,
+          teamId,
+          endpoint: "/api/ai/structure/revise-all",
+          modelName: "claude-opus-4-6",
           model: opus,
           system: STRUCTURE_PROMPT,
           prompt,
           abortSignal: signal,
+          providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+          cacheMetadata: { patchMode: true },
         });
+        const { cacheReadInputTokens, cacheCreationInputTokens } =
+          extractAnthropicCacheMetrics(providerMetadata);
 
         await recordAiUsage({
           supabase,
@@ -140,7 +158,15 @@ JSONのみ出力し、説明文は不要です。
           promptChars: prompt.length,
           completionChars: text.length,
           usage,
-          metadata: { patchMode: true },
+          metadata: {
+            patchMode: true,
+            cacheHit,
+            cacheLayer,
+            cacheKeyPrefix,
+            cacheReadInputTokens,
+            cacheCreationInputTokens,
+            requestFingerprintVersion,
+          },
         });
 
         let parsed: { patches?: NumberedPatch[] };

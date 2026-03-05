@@ -3,6 +3,8 @@ import { parseJsonBody } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/api/auth";
 import { withErrorHandling } from "@/lib/api/error";
 import { opus } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { windowByText } from "@/lib/ai/history-window";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
 import { buildDiscussionPrompt } from "@/lib/ai/prompts/discussion";
@@ -28,8 +30,6 @@ function convertToCoreMessages(
   });
 }
 
-const VALID_MODES = ["draw_out", "challenge", "expand", "structure"];
-
 export async function POST(request: Request) {
   return withErrorHandling(
     async () => {
@@ -41,7 +41,6 @@ export async function POST(request: Request) {
 
       const body = await parseJsonBody(request);
       const { projectId, brainstormId } = body;
-      const mode = VALID_MODES.includes(body.mode) ? body.mode : "draw_out";
 
       const fullMessages = convertToCoreMessages(body.messages || []);
       const promptMessages = windowByText(fullMessages, (m) => m.content, {
@@ -91,7 +90,7 @@ export async function POST(request: Request) {
         }
       }
 
-      const systemPrompt = buildDiscussionPrompt(mode) + documentContext;
+      const systemPrompt = buildDiscussionPrompt() + documentContext;
       const promptChars =
         systemPrompt.length +
         promptMessages.reduce((sum, msg) => sum + msg.content.length, 0);
@@ -100,7 +99,10 @@ export async function POST(request: Request) {
         model: opus,
         system: systemPrompt,
         messages: promptMessages,
-        async onFinish({ text, totalUsage }) {
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        async onFinish({ text, totalUsage, providerMetadata }) {
+          const { cacheReadInputTokens, cacheCreationInputTokens } =
+            extractAnthropicCacheMetrics(providerMetadata);
           await recordAiUsage({
             supabase,
             endpoint: "/api/ai/discussion",
@@ -108,10 +110,14 @@ export async function POST(request: Request) {
             model: "claude-opus-4-6",
             userId: user.id,
             projectId,
-            metadata: brainstormId ? { brainstorm_id: brainstormId } : {},
             promptChars,
             completionChars: text.length,
             usage: totalUsage,
+            metadata: {
+              ...(brainstormId ? { brainstorm_id: brainstormId } : {}),
+              cacheReadInputTokens,
+              cacheCreationInputTokens,
+            },
           });
 
           // Save chat history after stream completes

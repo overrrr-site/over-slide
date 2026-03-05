@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertInput, parseJsonBody } from "@/lib/api/validation";
-import { generateText } from "ai";
 import { opus } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { cachedGenerateText } from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { parseJsonObjectFromText } from "@/lib/ai/json-response";
 import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
+import {
+  findDuplicateRevisionResult,
+  isLowSignalInstruction,
+} from "@/lib/ai/pre-call-gate";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
 import { STRUCTURE_PROMPT } from "@/lib/ai/prompts/structure";
 import { requireAuth } from "@/lib/api/auth";
@@ -28,6 +34,33 @@ export async function POST(request: NextRequest) {
         projectId && pageNumber && instruction && currentPage,
         "Missing required fields"
       );
+
+      if (isLowSignalInstruction(instruction)) {
+        return NextResponse.json({
+          revisedPage: currentPage as Record<string, unknown>,
+          skipped: true,
+          reason: "low_signal_instruction",
+        });
+      }
+
+      const duplicate = await findDuplicateRevisionResult({
+        supabase,
+        projectId,
+        stepType: "structure",
+        pageNumber,
+        instruction,
+      });
+      if (
+        duplicate?.originalContent &&
+        compactJsonForPrompt(duplicate.originalContent) ===
+          compactJsonForPrompt(currentPage)
+      ) {
+        return NextResponse.json({
+          revisedPage: duplicate.revisedContent,
+          reused: true,
+          reason: "duplicate_instruction",
+        });
+      }
 
       const teamId = await getTeamIdForUser(supabase, user.id);
       const ragContext = await buildRagContext({
@@ -59,11 +92,27 @@ page_number は ${pageNumber} のまま変更しないでください。
   "notes": "..."
 }${ragContext}`;
 
-      const { text, usage } = await generateText({
+      const {
+        text,
+        usage,
+        providerMetadata,
+        cacheHit,
+        cacheLayer,
+        cacheKeyPrefix,
+        requestFingerprintVersion,
+      } = await cachedGenerateText({
+        supabase,
+        teamId,
+        endpoint: "/api/ai/structure/revise",
+        modelName: "claude-opus-4-6",
         model: opus,
         system: STRUCTURE_PROMPT,
         prompt,
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        cacheMetadata: { pageNumber },
       });
+      const { cacheReadInputTokens, cacheCreationInputTokens } =
+        extractAnthropicCacheMetrics(providerMetadata);
 
       await recordAiUsage({
         supabase,
@@ -76,6 +125,15 @@ page_number は ${pageNumber} のまま変更しないでください。
         promptChars: prompt.length,
         completionChars: text.length,
         usage,
+        metadata: {
+          pageNumber,
+          cacheHit,
+          cacheLayer,
+          cacheKeyPrefix,
+          cacheReadInputTokens,
+          cacheCreationInputTokens,
+          requestFingerprintVersion,
+        },
       });
 
       let revisedPage: Record<string, unknown>;
@@ -156,7 +214,7 @@ page_number は ${pageNumber} のまま変更しないでください。
         `[structure/revise] Revised page ${pageNumber} for project ${projectId}`
       );
 
-      return NextResponse.json({ revisedPage });
+      return NextResponse.json({ revisedPage, reused: cacheHit });
     },
     {
       context: "structure/revise",

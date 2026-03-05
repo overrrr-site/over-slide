@@ -3,6 +3,8 @@ import { parseJsonBody } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/api/auth";
 import { withErrorHandling } from "@/lib/api/error";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
 import {
   RESEARCH_MEMO_PROMPT,
@@ -90,6 +92,7 @@ export async function POST(request: Request) {
 
       const body = await parseJsonBody(request);
       const { projectId } = body;
+      let existingMemoContent: Record<string, unknown> = {};
 
       // useChat's DefaultChatTransport sends data inside messages array
       // The frontend encodes briefSheet/searchResults/keywords as JSON in the user message text
@@ -132,6 +135,17 @@ export async function POST(request: Request) {
           } catch {
             // Not JSON — use as-is (plain text prompt)
           }
+        }
+      }
+
+      if (projectId) {
+        const { data: memoRow } = await supabase
+          .from("research_memos")
+          .select("content")
+          .eq("project_id", projectId)
+          .single();
+        if (memoRow?.content && typeof memoRow.content === "object") {
+          existingMemoContent = memoRow.content as Record<string, unknown>;
         }
       }
 
@@ -198,7 +212,10 @@ export async function POST(request: Request) {
         model: sonnet,
         system: systemPrompt,
         prompt: `${taskPrompt}\n\n${promptContextWithKnowledge}`,
-        async onFinish({ text, totalUsage }) {
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        async onFinish({ text, totalUsage, providerMetadata }) {
+          const { cacheReadInputTokens, cacheCreationInputTokens } =
+            extractAnthropicCacheMetrics(providerMetadata);
           await recordAiUsage({
             supabase,
             endpoint: "/api/ai/research",
@@ -209,6 +226,10 @@ export async function POST(request: Request) {
             promptChars: taskPrompt.length + promptContextWithKnowledge.length,
             completionChars: text.length,
             usage: totalUsage,
+            metadata: {
+              cacheReadInputTokens,
+              cacheCreationInputTokens,
+            },
           });
 
           // 部分編集の場合はマージした結果を保存
@@ -225,6 +246,7 @@ export async function POST(request: Request) {
                 search_results: normalizedSearchResults,
                 raw_markdown: finalMarkdown,
                 content: {
+                  ...existingMemoContent,
                   chat_history: normalizedChatHistory,
                   latest_instruction: instructionText || null,
                 },

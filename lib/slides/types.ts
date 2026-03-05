@@ -10,8 +10,9 @@ export type SlideType =
   | "section"
   | "content"
   | "two-column"
-  | "visual"
+  | "three-column"
   | "data"
+  | "toc"
   | "closing";
 
 export interface HtmlSlide {

@@ -64,6 +64,7 @@ export const BASE_STYLES = `
   font-weight: 700;
   line-height: 1.3;
   letter-spacing: 0.02em;
+  color: inherit;
 }
 
 .cover-subtitle {
@@ -71,7 +72,34 @@ export const BASE_STYLES = `
   font-size: 18px;
   font-weight: 400;
   line-height: 1.5;
+  color: inherit;
   opacity: 0.85;
+}
+
+/* Ensure text colors on dark slide backgrounds */
+.slide--navy .cover-title,
+.slide--navy .cover-subtitle,
+.slide--navy .section-title { color: var(--white); }
+.slide--green .cover-title,
+.slide--green .cover-subtitle,
+.slide--green .section-title { color: var(--white); }
+
+/* Image placeholder */
+.image-placeholder {
+  background: var(--beige);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  overflow: hidden;
+  min-height: 180px;
+}
+
+.image-placeholder--full {
+  width: 100%;
+  height: 100%;
 }
 
 .section-title {
@@ -96,6 +124,19 @@ export const BASE_STYLES = `
   font-weight: 400;
   line-height: 1.8;
   color: var(--text-primary);
+}
+
+.message-area {
+  margin-bottom: 16px;
+}
+
+.key-message {
+  font-family: var(--font-jp);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--navy);
+  line-height: 1.4;
+  margin-bottom: 4px;
 }
 
 .caption {
@@ -395,6 +436,238 @@ export const BASE_STYLES = `
   width: 100%;
   height: 100%;
   fill: currentColor;
+}
+
+/* ─── Statement (Mission/Vision) ─── */
+.statement-label {
+  font-family: var(--font-en);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--green);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+
+.statement-text {
+  font-family: var(--font-jp);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--navy);
+}
+
+/* ─── Profile Table (Company Overview) ─── */
+.profile-table {
+  width: 100%;
+}
+
+.profile-table dt {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  padding: 10px 0 4px;
+  border-top: 1px solid var(--beige);
+}
+
+.profile-table dt:first-child {
+  border-top: none;
+}
+
+.profile-table dd {
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 0 0 8px;
+  margin-left: 0;
+}
+
+/* ─── Table of Contents ─── */
+.toc-item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--beige);
+  font-size: 14px;
+}
+
+.toc-item:last-child {
+  border-bottom: none;
+}
+
+.toc-number {
+  font-family: var(--font-en);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--navy);
+  min-width: 28px;
+}
+
+.toc-title {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.toc-page {
+  font-family: var(--font-en);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.toc-line {
+  flex: 1;
+  border-bottom: 1px dotted var(--beige);
+  margin: 0 8px;
+}
+
+.toc-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-left: 40px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* ─── Timeline ─── */
+.timeline-track {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-top: 20px;
+  flex: 1;
+}
+
+.timeline-track::before {
+  content: '';
+  position: absolute;
+  top: 30px;
+  left: 24px;
+  right: 24px;
+  height: 3px;
+  background: var(--navy);
+}
+
+.timeline-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+}
+
+.timeline-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--navy);
+  border: 3px solid var(--off-white);
+  margin-bottom: 12px;
+}
+
+.timeline-dot--active {
+  background: var(--green);
+}
+
+.timeline-year {
+  font-family: var(--font-en);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 6px;
+}
+
+.timeline-content {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  max-width: 120px;
+}
+
+/* ─── Person / Message ─── */
+.person-area {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.person-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-en);
+  font-size: 28px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.person-avatar--green {
+  background: var(--green);
+}
+
+.person-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.person-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.person-role {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.person-message {
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--text-primary);
+  padding: 20px 24px;
+  background: var(--white);
+  border-radius: 12px;
+  border: 1px solid var(--beige);
+  position: relative;
+  margin-top: 16px;
+}
+
+/* ─── Case Study ─── */
+.case-study-card {
+  display: flex;
+  gap: 32px;
+  flex: 1;
+  align-items: center;
+}
+
+.case-study-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.case-study-image {
+  width: 280px;
+  height: 200px;
+  background: var(--beige);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 /* ─── Print (PDF output) ─── */

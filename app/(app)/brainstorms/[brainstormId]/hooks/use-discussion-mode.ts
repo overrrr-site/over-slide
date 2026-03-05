@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   DiscussionMode,
   CoverageStatus,
@@ -9,7 +9,8 @@ import type {
 } from "../types";
 import { getMessageText } from "../utils";
 
-const MODE_SUGGEST_REGEX = /\[MODE_SUGGEST:(draw_out|challenge|expand|structure)\]/;
+const CURRENT_PHASE_REGEX =
+  /\[CURRENT_PHASE:(draw_out|challenge|expand|structure)\]/;
 const COVERAGE_REGEX = /\[COVERAGE:([\w,]+)\]/;
 const VALID_COVERAGE_KEYS: CoverageItemKey[] = [
   "client_info",
@@ -29,82 +30,56 @@ const INITIAL_COVERAGE: CoverageStatus = {
 
 interface UseDiscussionModeParams {
   messages: DiscussionChatMessage[];
-  currentMode: DiscussionMode;
-  onModeChange: (mode: DiscussionMode) => void;
 }
 
-export function useDiscussionMode({
-  messages,
-  currentMode,
-  onModeChange,
-}: UseDiscussionModeParams) {
-  const [suggestedMode, setSuggestedMode] = useState<DiscussionMode | null>(
-    null
-  );
+export function useDiscussionMode({ messages }: UseDiscussionModeParams) {
+  const [currentPhase, setCurrentPhase] =
+    useState<DiscussionMode>("draw_out");
   const [coverageStatus, setCoverageStatus] =
     useState<CoverageStatus>(INITIAL_COVERAGE);
   const lastParsedIndexRef = useRef(-1);
 
-  // Parse AI responses for mode suggestions and coverage markers
   useEffect(() => {
     if (messages.length === 0) return;
 
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.role !== "assistant") return;
 
-    // Avoid re-parsing the same message
     const msgIndex = messages.length - 1;
     if (msgIndex <= lastParsedIndexRef.current) return;
     lastParsedIndexRef.current = msgIndex;
 
     const text = getMessageText(lastMessage);
 
-    // Parse mode suggestion
-    const modeMatch = text.match(MODE_SUGGEST_REGEX);
-    if (modeMatch) {
-      const suggested = modeMatch[1] as DiscussionMode;
-      if (suggested !== currentMode) {
-        setTimeout(() => setSuggestedMode(suggested), 0);
-      }
+    // Parse current phase
+    const phaseMatch = text.match(CURRENT_PHASE_REGEX);
+    if (phaseMatch) {
+      const phase = phaseMatch[1] as DiscussionMode;
+      setTimeout(() => setCurrentPhase(phase), 0);
     }
 
-    // Parse coverage (only relevant in draw_out mode)
-    if (currentMode === "draw_out") {
-      const coverageMatch = text.match(COVERAGE_REGEX);
-      if (coverageMatch) {
-        const items = coverageMatch[1].split(",");
-        setTimeout(() => {
-          setCoverageStatus((prev) => {
-            const next = { ...prev };
-            for (const item of items) {
-              const key = item.trim() as CoverageItemKey;
-              if (VALID_COVERAGE_KEYS.includes(key)) {
-                next[key] = true;
-              }
+    // Parse coverage (only relevant in draw_out phase)
+    const coverageMatch = text.match(COVERAGE_REGEX);
+    if (coverageMatch) {
+      const items = coverageMatch[1].split(",");
+      setTimeout(() => {
+        setCoverageStatus((prev) => {
+          const next = { ...prev };
+          for (const item of items) {
+            const key = item.trim() as CoverageItemKey;
+            if (VALID_COVERAGE_KEYS.includes(key)) {
+              next[key] = true;
             }
-            return next;
-          });
-        }, 0);
-      }
+          }
+          return next;
+        });
+      }, 0);
     }
-  }, [messages, currentMode]);
-
-  const acceptSuggestion = useCallback(() => {
-    if (suggestedMode) {
-      onModeChange(suggestedMode);
-      setSuggestedMode(null);
-    }
-  }, [suggestedMode, onModeChange]);
-
-  const dismissSuggestion = useCallback(() => {
-    setSuggestedMode(null);
-  }, []);
+  }, [messages]);
 
   return {
-    suggestedMode,
+    currentPhase,
     coverageStatus,
-    acceptSuggestion,
-    dismissSuggestion,
   };
 }
 
@@ -113,7 +88,7 @@ export function useDiscussionMode({
  */
 export function stripMarkers(text: string): string {
   return text
-    .replace(MODE_SUGGEST_REGEX, "")
+    .replace(CURRENT_PHASE_REGEX, "")
     .replace(COVERAGE_REGEX, "")
     .trimEnd();
 }

@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthJson } from "@/lib/api/auth";
-import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import {
+  cachedGenerateObject,
+  cachedGenerateText,
+} from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { KNOWLEDGE_ANALYSIS_PROMPT } from "@/lib/ai/prompts/knowledge-analysis";
+import { recordAiUsage } from "@/lib/ai/usage-logger";
 
 
 const analysisSchema = z.object({
@@ -32,7 +38,7 @@ export async function POST(request: NextRequest) {
   if (auth instanceof Response) {
     return auth;
   }
-  const { supabase } = auth;
+  const { supabase, user, profile } = auth;
 
   const { docId } = await request.json();
   if (!docId) {
@@ -100,15 +106,52 @@ export async function POST(request: NextRequest) {
 
     try {
       // Primary: generateObject (structured output via tool calling)
-      const result = await generateObject({
+      const {
+        object: analysisObject,
+        usage,
+        providerMetadata,
+        cacheHit,
+        cacheLayer,
+        cacheKeyPrefix,
+        requestFingerprintVersion,
+      } = await cachedGenerateObject<z.infer<typeof analysisSchema>>({
+        supabase,
+        teamId: profile.team_id,
+        endpoint: "/api/knowledge/analyze",
+        modelName: "claude-sonnet-4-5-20250929",
         model: sonnet,
         schema: analysisSchema,
         system: ANALYSIS_SYSTEM_FOR_STRUCTURED,
         prompt: `以下の提案書テキストを分析してください:\n\n${docText}`,
         maxOutputTokens: 8192,
         abortSignal: controller.signal,
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        cacheMetadata: { stage: "structured", docId },
       });
-      analysis = result.object;
+      const { cacheReadInputTokens, cacheCreationInputTokens } =
+        extractAnthropicCacheMetrics(providerMetadata);
+      analysis = analysisObject;
+      await recordAiUsage({
+        supabase,
+        endpoint: "/api/knowledge/analyze",
+        operation: "generateText",
+        model: "claude-sonnet-4-5-20250929",
+        userId: user.id,
+        teamId: profile.team_id,
+        promptChars: docText.length + ANALYSIS_SYSTEM_FOR_STRUCTURED.length,
+        completionChars: JSON.stringify(analysis).length,
+        usage,
+        metadata: {
+          stage: "structured",
+          docId,
+          cacheHit,
+          cacheLayer,
+          cacheKeyPrefix,
+          cacheReadInputTokens,
+          cacheCreationInputTokens,
+          requestFingerprintVersion,
+        },
+      });
       console.log(`[Knowledge Analysis] generateObject succeeded for docId=${docId}`);
     } catch (structuredErr) {
       console.warn(
@@ -117,13 +160,29 @@ export async function POST(request: NextRequest) {
       );
 
       // Fallback: generateText + JSON extraction
-      const { text: rawText } = await generateText({
+      const {
+        text: rawText,
+        usage,
+        providerMetadata,
+        cacheHit,
+        cacheLayer,
+        cacheKeyPrefix,
+        requestFingerprintVersion,
+      } = await cachedGenerateText({
+        supabase,
+        teamId: profile.team_id,
+        endpoint: "/api/knowledge/analyze",
+        modelName: "claude-sonnet-4-5-20250929",
         model: sonnet,
         system: KNOWLEDGE_ANALYSIS_PROMPT,
         prompt: `以下の提案書テキストを分析してください:\n\n${docText}`,
         maxOutputTokens: 8192,
         abortSignal: controller.signal,
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        cacheMetadata: { stage: "fallback", docId },
       });
+      const { cacheReadInputTokens, cacheCreationInputTokens } =
+        extractAnthropicCacheMetrics(providerMetadata);
 
       // Extract JSON from response
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
@@ -151,6 +210,27 @@ export async function POST(request: NextRequest) {
         const parsed = JSON.parse(cleaned);
         analysis = analysisSchema.parse(parsed);
       }
+      await recordAiUsage({
+        supabase,
+        endpoint: "/api/knowledge/analyze",
+        operation: "generateText",
+        model: "claude-sonnet-4-5-20250929",
+        userId: user.id,
+        teamId: profile.team_id,
+        promptChars: docText.length + KNOWLEDGE_ANALYSIS_PROMPT.length,
+        completionChars: rawText.length,
+        usage,
+        metadata: {
+          stage: "fallback",
+          docId,
+          cacheHit,
+          cacheLayer,
+          cacheKeyPrefix,
+          cacheReadInputTokens,
+          cacheCreationInputTokens,
+          requestFingerprintVersion,
+        },
+      });
       console.log(`[Knowledge Analysis] generateText fallback succeeded for docId=${docId}`);
     }
 

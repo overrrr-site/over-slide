@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertInput, parseJsonBody } from "@/lib/api/validation";
-import { generateText } from "ai";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { cachedGenerateText } from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { parseJsonObjectFromText } from "@/lib/ai/json-response";
+import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
+import {
+  findDuplicateRevisionResult,
+  isLowSignalInstruction,
+} from "@/lib/ai/pre-call-gate";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
 import { DESIGN_HTML_PROMPT } from "@/lib/ai/prompts/design-html";
 import { requireAuth } from "@/lib/api/auth";
@@ -33,6 +40,34 @@ export async function POST(request: NextRequest) {
           currentSlide,
         "Missing required fields"
       );
+
+      if (isLowSignalInstruction(instruction)) {
+        return NextResponse.json({
+          revisedSlide: currentSlide,
+          skipped: true,
+          reason: "low_signal_instruction",
+        });
+      }
+
+      const pageNumber = Number(slideIndex) + 1;
+      const duplicate = await findDuplicateRevisionResult({
+        supabase,
+        projectId,
+        stepType: "design",
+        pageNumber,
+        instruction,
+      });
+      if (
+        duplicate?.originalContent &&
+        compactJsonForPrompt(duplicate.originalContent) ===
+          compactJsonForPrompt(currentSlide)
+      ) {
+        return NextResponse.json({
+          revisedSlide: duplicate.revisedContent,
+          reused: true,
+          reason: "duplicate_instruction",
+        });
+      }
 
       // Timeout: 60 seconds for single slide revision
       const { signal, cleanup } = createTimeoutController(60_000);
@@ -73,13 +108,29 @@ ${instruction}
   ]
 }${ragContext}`;
 
-        const { text, usage } = await generateText({
+        const {
+          text,
+          usage,
+          providerMetadata,
+          cacheHit,
+          cacheLayer,
+          cacheKeyPrefix,
+          requestFingerprintVersion,
+        } = await cachedGenerateText({
+          supabase,
+          teamId,
+          endpoint: "/api/ai/design/revise",
+          modelName: "claude-sonnet-4-5-20250929",
           model: sonnet,
           system: DESIGN_HTML_PROMPT,
           prompt,
           maxOutputTokens: 4096,
           abortSignal: signal,
+          providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+          cacheMetadata: { slideNumber: pageNumber },
         });
+        const { cacheReadInputTokens, cacheCreationInputTokens } =
+          extractAnthropicCacheMetrics(providerMetadata);
 
         await recordAiUsage({
           supabase,
@@ -92,6 +143,15 @@ ${instruction}
           promptChars: prompt.length,
           completionChars: text.length,
           usage,
+          metadata: {
+            slideNumber: pageNumber,
+            cacheHit,
+            cacheLayer,
+            cacheKeyPrefix,
+            cacheReadInputTokens,
+            cacheCreationInputTokens,
+            requestFingerprintVersion,
+          },
         });
 
         let parsed: {
@@ -193,7 +253,7 @@ ${instruction}
           `[design/revise] Revised slide ${slideIndex} for project ${projectId}`
         );
 
-        return NextResponse.json({ revisedSlide });
+        return NextResponse.json({ revisedSlide, reused: cacheHit });
       } finally {
         cleanup();
       }

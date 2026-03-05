@@ -13,7 +13,6 @@ type Props = Pick<
   | "briefNotice"
   | "updateBriefField"
   | "saveBriefSheet"
-  | "topicSuggestions"
   | "aiSuggestions"
   | "addedQueries"
   | "handleSuggestKeywords"
@@ -45,7 +44,6 @@ export function ResearchControlsPanel(props: Props) {
     briefNotice,
     updateBriefField,
     saveBriefSheet,
-    topicSuggestions,
     aiSuggestions,
     addedQueries,
     handleSuggestKeywords,
@@ -109,11 +107,11 @@ export function ResearchControlsPanel(props: Props) {
         )}
       </div>
 
-      {(topicSuggestions.length > 0 || aiSuggestions.length > 0) && (
+      {aiSuggestions.length > 0 && (
         <div className="mb-4">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-text-secondary">
-              キーワード候補（クエリ化済み）
+              AIクエリ候補
             </label>
             <button
               onClick={clearKeywordsAndSuggestions}
@@ -126,28 +124,6 @@ export function ResearchControlsPanel(props: Props) {
             候補は検索キーワード欄に自動で追加されます
           </p>
           <div className="mt-1 flex flex-wrap gap-1.5">
-            {topicSuggestions.map((suggestion, index) => {
-              const isAdded = addedQueries.has(suggestion.query);
-              return (
-                <div
-                  key={`topic-${index}`}
-                  title={
-                    suggestion.source
-                      ? `${suggestion.source} → ${suggestion.query}`
-                      : suggestion.purpose
-                  }
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                    isAdded
-                      ? "border-beige bg-off-white text-text-secondary"
-                      : "border-beige bg-white text-text-primary"
-                  }`}
-                >
-                  <Icon icon="mdi:text-search" className="h-3 w-3 shrink-0" />
-                  <span className="max-w-[200px] truncate">{suggestion.query}</span>
-                  {isAdded && <Icon icon="mdi:check" className="h-3 w-3 shrink-0 text-green" />}
-                </div>
-              );
-            })}
             {aiSuggestions.map((suggestion, index) => {
               const isAdded = addedQueries.has(suggestion.query);
               return (
@@ -178,12 +154,12 @@ export function ResearchControlsPanel(props: Props) {
         {suggestingKeywords ? (
           <span className="inline-flex items-center gap-1.5">
             <Icon icon="mdi:loading" className="h-3.5 w-3.5 animate-spin" />
-            キーワード候補を生成中...
+            クエリを再生成中...
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5">
             <Icon icon="mdi:auto-fix" className="h-3.5 w-3.5" />
-            AIでキーワード候補を生成
+            AIでクエリ再生成
           </span>
         )}
       </button>

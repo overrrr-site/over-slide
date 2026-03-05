@@ -1,31 +1,132 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseJsonWithSchema } from "@/lib/api/validation";
-import { generateObject } from "ai";
 import { z } from "zod";
-import { sonnet } from "@/lib/ai/anthropic";
-import { recordAiUsage } from "@/lib/ai/usage-logger";
-import { RESEARCH_QUERY_PROMPT } from "@/lib/ai/prompts/research";
-import { requireAuth } from "@/lib/api/auth";
-import { createTimeoutController } from "@/lib/api/abort";
+import { parseJsonWithSchema } from "@/lib/api/validation";
 import { withErrorHandling } from "@/lib/api/error";
+import { requireAuth } from "@/lib/api/auth";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
+import { recordAiUsage } from "@/lib/ai/usage-logger";
+import { generateResearchQueries } from "@/lib/research/query-generator";
+import {
+  createQueryPresetMeta,
+  parseQueryPresetMeta,
+  type QueryPresetSource,
+} from "@/lib/research/query-preset";
+import {
+  extractQueriesFromKeywords,
+  mergeKeywordText,
+  sanitizeText,
+} from "@/lib/research/text-utils";
+import { normalizeKeywordTextToQueries } from "@/lib/research/topic-queries";
 
-/** キーワード候補の型定義（構造化出力用） */
-const suggestKeywordsSchema = z.object({
-  queries: z
-    .array(
-      z.object({
-        query: z.string().describe("Web検索に適した検索クエリ文字列"),
-        purpose: z.string().describe("このクエリで何を調べたいか（1文で）"),
-      })
-    )
-    .describe("5〜15件の検索クエリリスト"),
-});
+const presetSourceSchema = z.enum([
+  "handoff",
+  "research_init",
+  "brief_save",
+  "manual",
+]);
 
 const suggestKeywordsRequestSchema = z.object({
   projectId: z.string().min(1, "projectId is required"),
   briefSheet: z.string().optional(),
   researchTopics: z.string().optional(),
+  source: presetSourceSchema.optional(),
+  persistPreset: z.boolean().optional(),
+  briefUpdatedAt: z.string().optional(),
+  existingKeywords: z.string().optional(),
 });
+
+type PresetMemoRow = {
+  theme_keywords?: string;
+  content?: unknown;
+};
+
+type PresetSupabaseLike = {
+  from: (table: string) => {
+    select: (columns: string) => {
+      eq: (column: string, value: string) => {
+        single: () => PromiseLike<{
+          data: PresetMemoRow | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+    upsert: (
+      row: Record<string, unknown>,
+      options: { onConflict: string }
+    ) => PromiseLike<{ error: { message: string } | null }>;
+  };
+};
+
+async function persistPresetState(params: {
+  supabase: unknown;
+  projectId: string;
+  source: QueryPresetSource;
+  briefUpdatedAt: string | null;
+  existingKeywords?: string;
+  generatedQueries?: string[];
+  status: "success" | "failed";
+  errorMessage: string | null;
+}) {
+  const db = params.supabase as PresetSupabaseLike;
+
+  const { data: memoRow } = await db
+    .from("research_memos")
+    .select("theme_keywords, content")
+    .eq("project_id", params.projectId)
+    .single();
+
+  const baseKeywords = normalizeKeywordTextToQueries(
+    sanitizeText(params.existingKeywords) ||
+      sanitizeText(memoRow?.theme_keywords)
+  );
+  const generatedQueries = (params.generatedQueries || []).filter(Boolean);
+  const mergedKeywords = normalizeKeywordTextToQueries(
+    mergeKeywordText(baseKeywords, generatedQueries)
+  );
+  const beforeSet = new Set(extractQueriesFromKeywords(baseKeywords));
+  const afterSet = new Set(extractQueriesFromKeywords(mergedKeywords));
+  const addedQueryCount = Math.max(afterSet.size - beforeSet.size, 0);
+
+  const existingContent =
+    memoRow?.content && typeof memoRow.content === "object"
+      ? (memoRow.content as Record<string, unknown>)
+      : {};
+
+  const nextContent: Record<string, unknown> = {
+    ...existingContent,
+    query_preset: createQueryPresetMeta({
+      status: params.status,
+      source: params.source,
+      briefUpdatedAt: params.briefUpdatedAt,
+      errorMessage: params.errorMessage,
+    }),
+  };
+
+  const payload: Record<string, unknown> = {
+    project_id: params.projectId,
+    content: nextContent,
+  };
+
+  if (params.status === "success") {
+    payload.theme_keywords = mergedKeywords;
+    payload.search_queries = extractQueriesFromKeywords(mergedKeywords);
+  }
+
+  const { error } = await db
+    .from("research_memos")
+    .upsert(payload, { onConflict: "project_id" });
+  if (error) {
+    console.warn(
+      `[suggest-keywords] Failed to persist query preset: ${error.message}`
+    );
+  }
+
+  return {
+    keywords: mergedKeywords,
+    addedQueryCount,
+    queryPreset: parseQueryPresetMeta(nextContent.query_preset),
+  };
+}
 
 export async function POST(request: NextRequest) {
   return withErrorHandling(
@@ -34,57 +135,58 @@ export async function POST(request: NextRequest) {
       if (auth instanceof Response) {
         return auth;
       }
-      const { supabase, user } = auth;
+      const { supabase, user, profile } = auth;
 
-      const { projectId, briefSheet, researchTopics } = await parseJsonWithSchema(
-        request,
-        suggestKeywordsRequestSchema
-      );
+      const {
+        projectId,
+        briefSheet,
+        researchTopics,
+        source = "manual",
+        persistPreset = false,
+        briefUpdatedAt,
+        existingKeywords,
+      } = await parseJsonWithSchema(request, suggestKeywordsRequestSchema);
+      let briefMarkdown = sanitizeText(briefSheet);
+      let resolvedResearchTopics = sanitizeText(researchTopics);
+      let resolvedBriefUpdatedAt = sanitizeText(briefUpdatedAt) || null;
 
-      let briefMarkdown = typeof briefSheet === "string" ? briefSheet.trim() : "";
-
-      if (!briefMarkdown) {
-        // ブリーフシートを取得
+      if (!briefMarkdown || !resolvedResearchTopics || !resolvedBriefUpdatedAt) {
         const { data: briefData } = await supabase
           .from("brief_sheets")
-          .select("raw_markdown")
+          .select("raw_markdown, research_topics, updated_at")
           .eq("project_id", projectId)
           .single();
 
-        if (!briefData?.raw_markdown) {
-          return NextResponse.json(
-            { error: "ブリーフシートが見つかりません" },
-            { status: 404 }
-          );
+        if (!briefMarkdown) {
+          briefMarkdown = sanitizeText(briefData?.raw_markdown);
         }
-
-        briefMarkdown = briefData.raw_markdown;
+        if (!resolvedResearchTopics) {
+          resolvedResearchTopics = sanitizeText(briefData?.research_topics);
+        }
+        if (!resolvedBriefUpdatedAt) {
+          resolvedBriefUpdatedAt = sanitizeText(briefData?.updated_at) || null;
+        }
       }
 
-      const prompt = [
-        "以下のブリーフシートをもとに、Web検索クエリを生成してください。",
-        briefMarkdown,
-        typeof researchTopics === "string" && researchTopics.trim()
-          ? `特に以下の調査項目は、検索クエリに変換して優先的に含めてください:\n${researchTopics.trim()}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-      const { signal, cleanup } = createTimeoutController(60_000);
+      if (!briefMarkdown) {
+        return NextResponse.json(
+          { error: "ブリーフシートが見つかりません" },
+          { status: 404 }
+        );
+      }
 
       try {
-        const { object: result, usage } = await generateObject({
-          model: sonnet,
-          schema: suggestKeywordsSchema,
-          system: RESEARCH_QUERY_PROMPT,
-          prompt,
-          maxOutputTokens: 4096,
-          abortSignal: signal,
+        const result = await generateResearchQueries({
+          supabase,
+          teamId: profile.team_id,
+          projectId,
+          briefSheet: briefMarkdown,
+          researchTopics: resolvedResearchTopics,
+          endpoint: "/api/ai/suggest-keywords",
+          cacheMetadata: { projectId, source },
         });
-
-        const promptChars =
-          RESEARCH_QUERY_PROMPT.length + prompt.length;
-        const completionChars = JSON.stringify(result).length;
+        const { cacheReadInputTokens, cacheCreationInputTokens } =
+          extractAnthropicCacheMetrics(result.providerMetadata);
 
         await recordAiUsage({
           supabase,
@@ -93,14 +195,58 @@ export async function POST(request: NextRequest) {
           model: "claude-sonnet-4-5-20250929",
           userId: user.id,
           projectId,
-          promptChars,
-          completionChars,
-          usage,
+          promptChars: result.prompt.length,
+          completionChars: JSON.stringify(result.queries).length,
+          usage: result.usage,
+          metadata: {
+            cacheHit: result.cacheHit,
+            cacheLayer: result.cacheLayer,
+            cacheKeyPrefix: result.cacheKeyPrefix,
+            cacheReadInputTokens,
+            cacheCreationInputTokens,
+            requestFingerprintVersion: result.requestFingerprintVersion,
+            source,
+          },
         });
 
-        return NextResponse.json(result);
-      } finally {
-        cleanup();
+        if (!persistPreset) {
+          return NextResponse.json({ queries: result.queries });
+        }
+
+        const persisted = await persistPresetState({
+          supabase,
+          projectId,
+          source,
+          briefUpdatedAt: resolvedBriefUpdatedAt,
+          existingKeywords,
+          generatedQueries: result.queries.map((item) => item.query),
+          status: "success",
+          errorMessage: null,
+        });
+
+        return NextResponse.json({
+          queries: result.queries,
+          keywords: persisted.keywords,
+          addedQueryCount: persisted.addedQueryCount,
+          queryPreset: persisted.queryPreset,
+        });
+      } catch (error) {
+        if (persistPreset) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "キーワード候補の生成に失敗しました";
+          await persistPresetState({
+            supabase,
+            projectId,
+            source,
+            briefUpdatedAt: resolvedBriefUpdatedAt,
+            existingKeywords,
+            status: "failed",
+            errorMessage: message,
+          });
+        }
+        throw error;
       }
     },
     {

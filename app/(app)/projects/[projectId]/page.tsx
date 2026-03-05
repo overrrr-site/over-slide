@@ -16,7 +16,7 @@ export default async function ProjectPage({
     .eq("id", projectId)
     .single();
 
-  const steps = getWorkflowSteps(project?.output_type);
+  const steps = getWorkflowSteps();
   const minStep = steps[0].id;
   const maxStep = steps[steps.length - 1].id;
   const currentStepValue = project?.current_step ?? minStep;

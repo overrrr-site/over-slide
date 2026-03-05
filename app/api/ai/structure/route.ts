@@ -1,8 +1,10 @@
 import { streamText } from "ai";
 import { parseJsonBody } from "@/lib/api/validation";
 import { opus } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
-import { STRUCTURE_PROMPT, DOCUMENT_STRUCTURE_PROMPT } from "@/lib/ai/prompts/structure";
+import { STRUCTURE_PROMPT } from "@/lib/ai/prompts/structure";
 import { requireAuth } from "@/lib/api/auth";
 import { withErrorHandling } from "@/lib/api/error";
 import { searchKnowledge, formatRetrievedContext } from "@/lib/knowledge/retriever";
@@ -22,6 +24,7 @@ export async function POST(request: Request) {
       // useChat's DefaultChatTransport sends data inside messages array
       let briefSheet = body.briefSheet || "";
       let researchMemo = body.researchMemo || "";
+      let discussionNote = body.discussionNote || "";
 
       if (!briefSheet && body.messages?.length) {
         const lastUserMsg = [...body.messages]
@@ -42,6 +45,7 @@ export async function POST(request: Request) {
             const parsed = JSON.parse(msgText);
             briefSheet = parsed.briefSheet || briefSheet;
             researchMemo = parsed.researchMemo || researchMemo;
+            discussionNote = parsed.discussionNote || discussionNote;
           } catch {
             // Not JSON — use as-is
           }
@@ -66,27 +70,13 @@ export async function POST(request: Request) {
         }
       }
 
-      // output_type に応じてプロンプトを切り替え
-      let outputType = "slide";
-      if (projectId) {
-        const { data: projectData } = await supabase
-          .from("projects")
-          .select("output_type")
-          .eq("id", projectId)
-          .single();
-        if (projectData?.output_type) {
-          outputType = projectData.output_type;
-        }
-      }
-
-      const systemPrompt = outputType === "document"
-        ? DOCUMENT_STRUCTURE_PROMPT
-        : STRUCTURE_PROMPT;
+      const systemPrompt = STRUCTURE_PROMPT;
 
       const prompt = [
         `<input>`,
         `<brief_sheet>\n${briefSheet}\n</brief_sheet>`,
         researchMemo ? `<research_memo>\n${researchMemo}\n</research_memo>` : "",
+        discussionNote ? `<discussion_note>\n${discussionNote}\n</discussion_note>` : "",
         ragContext ? `<knowledge_base>\n${ragContext}\n</knowledge_base>` : "",
         `</input>`,
         "",
@@ -99,7 +89,10 @@ export async function POST(request: Request) {
         model: opus,
         system: systemPrompt,
         prompt,
-        async onFinish({ text, totalUsage }) {
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        async onFinish({ text, totalUsage, providerMetadata }) {
+          const { cacheReadInputTokens, cacheCreationInputTokens } =
+            extractAnthropicCacheMetrics(providerMetadata);
           await recordAiUsage({
             supabase,
             endpoint: "/api/ai/structure",
@@ -111,6 +104,10 @@ export async function POST(request: Request) {
             promptChars: prompt.length,
             completionChars: text.length,
             usage: totalUsage,
+            metadata: {
+              cacheReadInputTokens,
+              cacheCreationInputTokens,
+            },
           });
 
           if (projectId) {

@@ -22,7 +22,6 @@ export interface BrainstormExport {
 }
 
 export interface BrainstormHandoffRequest {
-  outputType: "slide" | "document";
   title?: string;
   clientName?: string;
 }

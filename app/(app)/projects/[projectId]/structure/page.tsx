@@ -39,12 +39,10 @@ interface PageStructure {
 function SortablePageCard({
   page,
   masterTypeColors,
-  outputType,
   onMessageChange,
 }: {
   page: PageStructure;
   masterTypeColors: Record<string, string>;
-  outputType: string;
   onMessageChange: (pageNumber: number, message: string) => void;
 }) {
   const {
@@ -100,13 +98,11 @@ function SortablePageCard({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            {outputType !== "document" && (
-              <span
-                className={`rounded px-1.5 py-0.5 text-xs font-medium ${masterTypeColors[page.master_type] || "bg-gray-100 text-gray-600"}`}
-              >
-                {page.master_type}
-              </span>
-            )}
+            <span
+              className={`rounded px-1.5 py-0.5 text-xs font-medium ${masterTypeColors[page.master_type] || "bg-gray-100 text-gray-600"}`}
+            >
+              {page.master_type}
+            </span>
             <h3 className="text-sm font-medium text-navy truncate">
               {page.title}
             </h3>
@@ -145,9 +141,9 @@ export default function StructurePage() {
   const router = useRouter();
   const [briefSheet, setBriefSheet] = useState("");
   const [researchMemo, setResearchMemo] = useState("");
+  const [discussionNote, setDiscussionNote] = useState("");
   const [pages, setPages] = useState<PageStructure[]>([]);
   const [structureId, setStructureId] = useState<string | null>(null);
-  const [outputType, setOutputType] = useState<string>("slide");
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Chat integration: register handler for APPLY payloads from AI chat
@@ -208,10 +204,10 @@ export default function StructurePage() {
     const load = async () => {
       const supabase = createClient();
 
-      const [briefResult, memoResult, structureResult, projectResult] = await Promise.all([
+      const [briefResult, memoResult, structureResult] = await Promise.all([
         supabase
           .from("brief_sheets")
-          .select("raw_markdown")
+          .select("raw_markdown, discussion_note")
           .eq("project_id", projectId)
           .single(),
         supabase
@@ -226,21 +222,16 @@ export default function StructurePage() {
           .order("version", { ascending: false })
           .limit(1)
           .maybeSingle(),
-        supabase
-          .from("projects")
-          .select("output_type")
-          .eq("id", projectId)
-          .single(),
       ]);
 
       if (briefResult.data?.raw_markdown)
         setBriefSheet(briefResult.data.raw_markdown);
+      if (briefResult.data?.discussion_note)
+        setDiscussionNote(briefResult.data.discussion_note);
       if (memoResult.data?.raw_markdown)
         setResearchMemo(memoResult.data.raw_markdown);
       if (structureResult.data?.pages)
         setPages(structureResult.data.pages as PageStructure[]);
-      if (projectResult.data?.output_type)
-        setOutputType(projectResult.data.output_type);
 
       // Also fetch structure ID for saving reordered pages
       const { data: structIdData } = await supabase
@@ -281,9 +272,9 @@ export default function StructurePage() {
     if (isStreaming) return; // guard against double-call
     clearError();
     sendMessage({
-      text: JSON.stringify({ briefSheet, researchMemo }),
+      text: JSON.stringify({ briefSheet, researchMemo, discussionNote }),
     });
-  }, [briefSheet, researchMemo, sendMessage, isStreaming, clearError]);
+  }, [briefSheet, researchMemo, discussionNote, sendMessage, isStreaming, clearError]);
 
   // Debounced save after reorder
   const saveReorderedPages = useCallback(
@@ -464,7 +455,6 @@ export default function StructurePage() {
                     key={`page-${page.page_number}`}
                     page={page}
                     masterTypeColors={masterTypeColors}
-                    outputType={outputType}
                     onMessageChange={handleMessageChange}
                   />
                 ))}

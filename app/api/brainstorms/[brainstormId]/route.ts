@@ -19,7 +19,7 @@ export async function GET(
   const [{ data: session, error: sessionError }, { data: exports }, { data: projects }, { data: uploadedFiles }] = await Promise.all([
     supabase
       .from("brainstorm_sessions")
-      .select("id, title, client_name, status, brief_tone, client_info, background, hypothesis, goal, constraints, research_topics, structure_draft, raw_markdown, chat_history, created_at, updated_at")
+      .select("id, title, client_name, status, brief_tone, client_info, background, hypothesis, goal, constraints, research_topics, structure_draft, raw_markdown, chat_history, created_at, updated_at, reasoning_chain, rejected_alternatives, key_expressions, discussion_note")
       .eq("id", brainstormId)
       .single(),
     supabase
@@ -66,7 +66,7 @@ export async function PATCH(
 
   const { data: current } = await supabase
     .from("brainstorm_sessions")
-    .select("id, client_info, background, hypothesis, goal, constraints, research_topics, structure_draft")
+    .select("id, client_info, background, hypothesis, goal, constraints, research_topics, structure_draft, reasoning_chain, rejected_alternatives, key_expressions, discussion_note")
     .eq("id", brainstormId)
     .single();
 
@@ -89,6 +89,10 @@ export async function PATCH(
     "constraints",
     "research_topics",
     "structure_draft",
+    "reasoning_chain",
+    "rejected_alternatives",
+    "key_expressions",
+    "discussion_note",
   ] as const;
 
   let hasBriefFieldUpdate = false;
@@ -108,6 +112,10 @@ export async function PATCH(
       constraints: (patch.constraints as string) ?? current.constraints ?? "",
       research_topics: (patch.research_topics as string) ?? current.research_topics ?? "",
       structure_draft: (patch.structure_draft as string) ?? current.structure_draft ?? "",
+      reasoning_chain: (patch.reasoning_chain as string) ?? current.reasoning_chain ?? "",
+      rejected_alternatives: (patch.rejected_alternatives as string) ?? current.rejected_alternatives ?? "",
+      key_expressions: (patch.key_expressions as string) ?? current.key_expressions ?? "",
+      discussion_note: (patch.discussion_note as string) ?? current.discussion_note ?? "",
     });
   }
 

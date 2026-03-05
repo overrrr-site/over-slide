@@ -34,7 +34,7 @@ ${compactJsonForPrompt(slidesSummary)}
 
 ルール:
 - cover, section, closing タイプのスライドには画像を追加しない
-- テキスト中心の content, two-column, visual, data スライドが対象
+- テキスト中心の content, two-column, data スライドが対象
 - 最大5枚まで選定
 - 画像プロンプトは英語で記述
 - プロンプトに文字・テキスト情報を絶対に含めない（No text, no words, no letters, no numbers, no labels）

@@ -34,6 +34,8 @@ export const quoteWorkspaceResponseSchema = z.object({
   items: z.array(quoteWorkspaceItemSchema).default([]),
 });
 
+export type QuoteWorkspaceResponse = z.infer<typeof quoteWorkspaceResponseSchema>;
+
 export type QuoteWorkspaceItem = z.infer<typeof quoteWorkspaceItemSchema>;
 export type QuoteWorkspaceReferenceMaterial = z.infer<
   typeof quoteWorkspaceReferenceMaterialSchema

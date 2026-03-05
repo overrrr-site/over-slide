@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertInput, parseJsonBody } from "@/lib/api/validation";
-import { generateText } from "ai";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { cachedGenerateText } from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
 import { patchByPageNumber, type NumberedPatch } from "@/lib/ai/diff-patch";
 import {
@@ -9,7 +11,7 @@ import {
   isLowSignalInstruction,
 } from "@/lib/ai/pre-call-gate";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
-import { DETAILS_PROMPT, DOCUMENT_DETAILS_PROMPT } from "@/lib/ai/prompts/details";
+import { DETAILS_PROMPT } from "@/lib/ai/prompts/details";
 import { requireAuth } from "@/lib/api/auth";
 import { createTimeoutController } from "@/lib/api/abort";
 import { withErrorHandling } from "@/lib/api/error";
@@ -91,6 +93,7 @@ type LogContext = {
   supabase: any;
   userId: string;
   projectId: string;
+  teamId?: string | null;
   feedbackCount: number;
 };
 
@@ -132,13 +135,33 @@ JSONのみ出力し、説明文は不要です。
   ]
 }`;
 
-  const { text, usage } = await generateText({
+  const {
+    text,
+    usage,
+    providerMetadata,
+    cacheHit,
+    cacheLayer,
+    cacheKeyPrefix,
+    requestFingerprintVersion,
+  } = await cachedGenerateText({
+    supabase: logContext.supabase,
+    teamId: logContext.teamId,
+    endpoint: "/api/ai/details/apply-feedback",
+    modelName: "claude-sonnet-4-5-20250929",
     model: sonnet,
     system: systemPrompt,
     prompt,
     maxOutputTokens: 16384,
     abortSignal: signal,
+    providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+    cacheMetadata: {
+      pageNumbers: pageNums,
+      feedbackItems: logContext.feedbackCount,
+      patchMode: true,
+    },
   });
+  const { cacheReadInputTokens, cacheCreationInputTokens } =
+    extractAnthropicCacheMetrics(providerMetadata);
 
   await recordAiUsage({
     supabase: logContext.supabase,
@@ -154,6 +177,12 @@ JSONのみ出力し、説明文は不要です。
       pageNumbers: pageNums,
       feedbackItems: logContext.feedbackCount,
       patchMode: true,
+      cacheHit,
+      cacheLayer,
+      cacheKeyPrefix,
+      cacheReadInputTokens,
+      cacheCreationInputTokens,
+      requestFingerprintVersion,
     },
   });
 
@@ -180,7 +209,7 @@ export async function POST(request: NextRequest) {
       if (auth instanceof Response) {
         return auth;
       }
-      const { supabase, user } = auth;
+      const { supabase, user, profile } = auth;
 
       const { projectId, adoptedItems } = await parseJsonBody(request);
 
@@ -190,24 +219,14 @@ export async function POST(request: NextRequest) {
       const { signal, cleanup } = createTimeoutController(300_000);
 
       try {
-        // Get current structure and page contents + output_type
-        const [{ data: structureData }, { data: projectData }] =
-          await Promise.all([
-            supabase
-              .from("structures")
-              .select("id, pages")
-              .eq("project_id", projectId)
-              .order("version", { ascending: false })
-              .limit(1)
-              .single(),
-            supabase
-              .from("projects")
-              .select("output_type")
-              .eq("id", projectId)
-              .single(),
-          ]);
-
-        const outputType = projectData?.output_type || "slide";
+        // Get current structure and page contents
+        const { data: structureData } = await supabase
+          .from("structures")
+          .select("id, pages")
+          .eq("project_id", projectId)
+          .order("version", { ascending: false })
+          .limit(1)
+          .single();
 
         if (!structureData) {
           return NextResponse.json(
@@ -277,8 +296,7 @@ export async function POST(request: NextRequest) {
           )
           .join("\n");
 
-        const systemPrompt =
-          outputType === "document" ? DOCUMENT_DETAILS_PROMPT : DETAILS_PROMPT;
+        const systemPrompt = DETAILS_PROMPT;
 
         // Batch strategy: 4 pages per batch, run in parallel
         const batches = chunkArray(affectedPages as PageContent[], BATCH_SIZE);
@@ -293,6 +311,7 @@ export async function POST(request: NextRequest) {
               supabase,
               userId: user.id,
               projectId,
+              teamId: profile.team_id,
               feedbackCount: feedbackItems.length,
             })
           )

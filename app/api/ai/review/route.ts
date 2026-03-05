@@ -3,6 +3,8 @@ import { parseJsonBody } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/api/auth";
 import { withErrorHandling } from "@/lib/api/error";
 import { opus } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
 import { REVIEW_PROMPT } from "@/lib/ai/prompts/review";
@@ -30,7 +32,10 @@ export async function POST(request: Request) {
         model: opus,
         system: REVIEW_PROMPT,
         prompt,
-        async onFinish({ text, totalUsage }) {
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        async onFinish({ text, totalUsage, providerMetadata }) {
+          const { cacheReadInputTokens, cacheCreationInputTokens } =
+            extractAnthropicCacheMetrics(providerMetadata);
           await recordAiUsage({
             supabase,
             endpoint: "/api/ai/review",
@@ -41,6 +46,10 @@ export async function POST(request: Request) {
             promptChars: prompt.length,
             completionChars: text.length,
             usage: totalUsage,
+            metadata: {
+              cacheReadInputTokens,
+              cacheCreationInputTokens,
+            },
           });
 
           if (projectId) {

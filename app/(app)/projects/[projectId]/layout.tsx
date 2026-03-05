@@ -55,15 +55,12 @@ export default async function ProjectLayout({
             initialClientName={project.client_name || ""}
           />
           <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-            <Icon
-              icon={project.output_type === "document" ? "mdi:file-document-outline" : "mdi:presentation"}
-              className="h-4 w-4"
-            />
-            {project.output_type === "document" ? "ドキュメント" : "スライド"}
+            <Icon icon="mdi:presentation" className="h-4 w-4" />
+            スライド
           </div>
         </div>
 
-        <StepBar projectId={projectId} currentStep={project.current_step} outputType={project.output_type || "slide"} />
+        <StepBar projectId={projectId} currentStep={project.current_step} />
       </div>
 
       {/* Step content + Chat panel */}

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseJsonBody } from "@/lib/api/validation";
-import { generateText } from "ai";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { cachedGenerateText } from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { parseJsonObjectFromText } from "@/lib/ai/json-response";
 import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
@@ -36,13 +38,33 @@ async function generateBatch(
   logContext?: UsageLogContext
 ): Promise<HtmlSlide[]> {
   const prompt = `以下のページコンテンツ（${startIndex + 1}〜${startIndex + pages.length}ページ目 / 全${totalPages}ページ）をHTMLスライドに変換してください:\n\n${compactJsonForPrompt(pages)}${ragContext}`;
-  const { text, usage } = await generateText({
+  const {
+    text,
+    usage,
+    providerMetadata,
+    cacheHit,
+    cacheLayer,
+    cacheKeyPrefix,
+    requestFingerprintVersion,
+  } = await cachedGenerateText({
+    supabase: logContext?.supabase,
+    teamId: logContext?.teamId,
+    endpoint: "/api/ai/design",
+    modelName: "claude-sonnet-4-5-20250929",
     model: sonnet,
     system: DESIGN_HTML_PROMPT,
     prompt,
     maxOutputTokens: 16384,
     abortSignal: signal,
+    providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+    cacheMetadata: {
+      batchStart: startIndex + 1,
+      batchSize: pages.length,
+      totalPages,
+    },
   });
+  const { cacheReadInputTokens, cacheCreationInputTokens } =
+    extractAnthropicCacheMetrics(providerMetadata);
 
   if (logContext) {
     await recordAiUsage({
@@ -60,6 +82,12 @@ async function generateBatch(
         batchStart: startIndex + 1,
         batchSize: pages.length,
         totalPages,
+        cacheHit,
+        cacheLayer,
+        cacheKeyPrefix,
+        cacheReadInputTokens,
+        cacheCreationInputTokens,
+        requestFingerprintVersion,
       },
     });
   }
@@ -106,6 +134,17 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Fetch key expressions from brief sheet for design context
+      let keyExpressions = "";
+      const { data: briefData } = await supabase
+        .from("brief_sheets")
+        .select("key_expressions")
+        .eq("project_id", projectId)
+        .maybeSingle();
+      if (briefData?.key_expressions) {
+        keyExpressions = briefData.key_expressions;
+      }
+
       // Fetch custom color scheme if available
       let colorOverrides: ColorOverrides | undefined;
       const { data: templateSettings } = await supabase
@@ -138,6 +177,11 @@ export async function POST(request: NextRequest) {
         const BATCH_SIZE = 4;
         const batches = chunkArray(pages, BATCH_SIZE);
 
+        // Build key expressions context for design prompt
+        const keyExpressionsContext = keyExpressions
+          ? `\n\n<key_expressions>\n${keyExpressions}\n</key_expressions>\nキーフレーズが提供されている場合、スライドのキーメッセージや見出しに自然に織り込んでください。`
+          : "";
+
         const batchResults = await Promise.all(
           batches.map((batch, batchIndex) =>
             generateBatch(
@@ -145,7 +189,7 @@ export async function POST(request: NextRequest) {
               batchIndex * BATCH_SIZE,
               totalPages,
               signal,
-              ragContext,
+              ragContext + keyExpressionsContext,
               {
                 supabase,
                 userId: user.id,

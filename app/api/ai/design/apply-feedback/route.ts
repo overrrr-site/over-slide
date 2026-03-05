@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertInput, parseJsonBody } from "@/lib/api/validation";
-import { generateText } from "ai";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { cachedGenerateText } from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { parseJsonObjectFromText } from "@/lib/ai/json-response";
 import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
 import { patchBySlideNumber, type NumberedPatch } from "@/lib/ai/diff-patch";
@@ -34,6 +36,7 @@ type UsageLogContext = {
   supabase: unknown;
   userId: string;
   projectId: string;
+  teamId?: string | null;
 };
 
 /**
@@ -72,13 +75,29 @@ JSONのみ出力し、説明文は不要です。
   ]
 }`;
 
-  const { text, usage } = await generateText({
+  const {
+    text,
+    usage,
+    providerMetadata,
+    cacheHit,
+    cacheLayer,
+    cacheKeyPrefix,
+    requestFingerprintVersion,
+  } = await cachedGenerateText({
+    supabase: logContext.supabase,
+    teamId: logContext.teamId,
+    endpoint: "/api/ai/design/apply-feedback",
+    modelName: "claude-sonnet-4-5-20250929",
     model: sonnet,
     system: DESIGN_HTML_PROMPT,
     prompt,
     maxOutputTokens: 16384,
     abortSignal: signal,
+    providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+    cacheMetadata: { slideNumbers: slideNums, patchMode: true },
   });
+  const { cacheReadInputTokens, cacheCreationInputTokens } =
+    extractAnthropicCacheMetrics(providerMetadata);
 
   await recordAiUsage({
     supabase: logContext.supabase,
@@ -90,7 +109,16 @@ JSONのみ出力し、説明文は不要です。
     promptChars: prompt.length,
     completionChars: text.length,
     usage,
-    metadata: { slideNumbers: slideNums, patchMode: true },
+    metadata: {
+      slideNumbers: slideNums,
+      patchMode: true,
+      cacheHit,
+      cacheLayer,
+      cacheKeyPrefix,
+      cacheReadInputTokens,
+      cacheCreationInputTokens,
+      requestFingerprintVersion,
+    },
   });
 
   const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -119,7 +147,7 @@ export async function POST(request: NextRequest) {
       if (auth instanceof Response) {
         return auth;
       }
-      const { supabase, user } = auth;
+      const { supabase, user, profile } = auth;
 
       const { projectId, adoptedItems } = await parseJsonBody(request);
 
@@ -227,6 +255,7 @@ export async function POST(request: NextRequest) {
               supabase,
               userId: user.id,
               projectId,
+              teamId: profile.team_id,
             })
           )
         );

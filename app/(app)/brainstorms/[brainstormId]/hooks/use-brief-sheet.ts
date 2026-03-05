@@ -35,6 +35,10 @@ function normalizeBriefSheetData(
     research_topics: data.research_topics || "",
     structure_draft: data.structure_draft || "",
     raw_markdown: data.raw_markdown || "",
+    reasoning_chain: data.reasoning_chain || "",
+    rejected_alternatives: data.rejected_alternatives || "",
+    key_expressions: data.key_expressions || "",
+    discussion_note: data.discussion_note || "",
   };
 }
 
@@ -56,7 +60,7 @@ export function useBriefSheet({
       const { data } = await supabase
         .from("brainstorm_sessions")
         .select(
-          "client_info, background, hypothesis, goal, constraints, research_topics, structure_draft, raw_markdown, brief_tone"
+          "client_info, background, hypothesis, goal, constraints, research_topics, structure_draft, raw_markdown, brief_tone, reasoning_chain, rejected_alternatives, key_expressions, discussion_note"
         )
         .eq("id", brainstormId)
         .single();

@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  const { title, clientName, outputType } = body;
+  const { title, clientName } = body;
 
   const { data, error } = await supabase
     .from("projects")
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       created_by: user.id,
       title: title || "新しいプロジェクト",
       client_name: clientName || "",
-      output_type: outputType === "document" ? "document" : "slide",
+      output_type: "slide",
       status: "draft",
       current_step: 1,
     })

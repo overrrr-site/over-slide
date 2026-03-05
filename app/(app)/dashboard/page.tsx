@@ -46,13 +46,12 @@ export default async function DashboardPage() {
       .limit(5),
   ]);
 
-  const stepName = (step: number, outputType?: string) => {
-    const steps = getWorkflowSteps(outputType);
+  const steps = getWorkflowSteps();
+  const totalSteps = steps.length;
+  const stepName = (step: number) => {
     if (step > steps[steps.length - 1].id) return "完了";
     return steps.find((s) => s.id === step)?.name || "";
   };
-
-  const totalStepsFor = (outputType?: string) => getWorkflowSteps(outputType).length;
 
   return (
     <div className="mx-auto w-full max-w-6xl overflow-auto p-6">
@@ -105,7 +104,6 @@ export default async function DashboardPage() {
                   </Badge>
                 </CardHeader>
                 <CardFooter>
-                  <span>ブリーフ作成</span>
                   <span>
                     {new Date(brainstorm.updated_at).toLocaleDateString("ja-JP")}
                   </span>
@@ -151,18 +149,15 @@ export default async function DashboardPage() {
                   </Badge>
                 </CardHeader>
                 <CardContent>
-                  <ProgressBar current={Math.min(project.current_step, totalStepsFor(project.output_type))} total={totalStepsFor(project.output_type)} />
+                  <ProgressBar current={Math.min(project.current_step, totalSteps)} total={totalSteps} />
                   <p className="mt-1.5 text-xs text-text-secondary">
-                    現在: {stepName(project.current_step, project.output_type)}
+                    現在: {stepName(project.current_step)}
                   </p>
                 </CardContent>
                 <CardFooter>
                   <span className="flex items-center gap-1">
-                    <Icon
-                      icon={project.output_type === "document" ? "mdi:file-document-outline" : "mdi:presentation"}
-                      className="h-3.5 w-3.5"
-                    />
-                    {project.output_type === "document" ? "ドキュメント" : "スライド"}
+                    <Icon icon="mdi:presentation" className="h-3.5 w-3.5" />
+                    スライド
                   </span>
                   <span>
                     {new Date(project.updated_at).toLocaleDateString("ja-JP")}

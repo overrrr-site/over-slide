@@ -5,10 +5,19 @@
  * embedTexts runs in a child process to isolate memory from the dev server.
  * embedQuery runs in-process (small payload, no memory concern).
  */
+import { createHash } from "crypto";
+import { REQUEST_FINGERPRINT_VERSION } from "@/lib/ai/cache-metadata";
+import {
+  buildSemanticCacheKey,
+  getCachedText,
+  setCachedText,
+} from "@/lib/ai/semantic-cache";
+import { createClient } from "@/lib/supabase/server";
 
 const VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings";
 const MODEL = "voyage-3";
 const VOYAGE_TIMEOUT_MS = 60_000; // 60 seconds per batch
+const EMBED_QUERY_ENDPOINT = "/knowledge/embed-query";
 
 interface VoyageResponse {
   data: Array<{
@@ -28,6 +37,10 @@ export async function embedTexts(
   texts: string[],
   _signal?: AbortSignal
 ): Promise<number[][]> {
+  if (_signal?.aborted) {
+    throw new Error("Embedding generation was aborted");
+  }
+
   const apiKey = process.env.VOYAGE_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -76,7 +89,10 @@ export async function embedTexts(
  * Generate a single embedding for a query text.
  * Runs in-process (single text, small memory footprint).
  */
-export async function embedQuery(text: string): Promise<number[]> {
+export async function embedQuery(
+  text: string,
+  teamId?: string | null
+): Promise<number[]> {
   const apiKey = process.env.VOYAGE_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -86,8 +102,41 @@ export async function embedQuery(text: string): Promise<number[]> {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), VOYAGE_TIMEOUT_MS);
+  const strictFingerprint = createHash("sha256")
+    .update(text)
+    .digest("hex");
+  const cacheKey = buildSemanticCacheKey({
+    endpoint: EMBED_QUERY_ENDPOINT,
+    model: MODEL,
+    requestFingerprintVersion: REQUEST_FINGERPRINT_VERSION,
+    strictFingerprint,
+  });
 
   try {
+    if (teamId) {
+      const supabase = await createClient();
+      const cached = await getCachedText({
+        supabase,
+        teamId,
+        endpoint: EMBED_QUERY_ENDPOINT,
+        model: MODEL,
+        cacheKey,
+      });
+
+      if (cached?.text) {
+        try {
+          const parsed = JSON.parse(cached.text) as {
+            embedding?: number[];
+          };
+          if (Array.isArray(parsed.embedding) && parsed.embedding.length > 0) {
+            return parsed.embedding;
+          }
+        } catch {
+          // Ignore stale cache payloads and regenerate.
+        }
+      }
+    }
+
     const response = await fetch(VOYAGE_API_URL, {
       method: "POST",
       headers: {
@@ -110,7 +159,31 @@ export async function embedQuery(text: string): Promise<number[]> {
     }
 
     const data: VoyageResponse = await response.json();
-    return data.data[0].embedding;
+    const embedding = data.data[0].embedding;
+
+    if (teamId) {
+      const supabase = await createClient();
+      await setCachedText({
+        supabase,
+        teamId,
+        endpoint: EMBED_QUERY_ENDPOINT,
+        model: MODEL,
+        cacheKey,
+        text: JSON.stringify({ embedding }),
+        usage: {
+          inputTokens: data.usage.total_tokens,
+          outputTokens: 0,
+          totalTokens: data.usage.total_tokens,
+        },
+        metadata: {
+          strictFingerprint,
+          requestFingerprintVersion: REQUEST_FINGERPRINT_VERSION,
+        },
+        ttlHours: 168,
+      });
+    }
+
+    return embedding;
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error(

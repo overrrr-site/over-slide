@@ -3,6 +3,8 @@ import { parseJsonBody } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/api/auth";
 import { withErrorHandling } from "@/lib/api/error";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { windowByText } from "@/lib/ai/history-window";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
 import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
@@ -586,7 +588,10 @@ export async function POST(request: Request) {
         model: sonnet,
         system: systemPrompt,
         messages: promptMessages,
-        async onFinish({ text, totalUsage }) {
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        async onFinish({ text, totalUsage, providerMetadata }) {
+          const { cacheReadInputTokens, cacheCreationInputTokens } =
+            extractAnthropicCacheMetrics(providerMetadata);
           // Log AI usage
           await recordAiUsage({
             supabase,
@@ -595,10 +600,14 @@ export async function POST(request: Request) {
             model: "claude-sonnet-4-5-20250929",
             userId: user.id,
             projectId,
-            metadata: { step },
             promptChars,
             completionChars: text.length,
             usage: totalUsage,
+            metadata: {
+              step,
+              cacheReadInputTokens,
+              cacheCreationInputTokens,
+            },
           });
 
           // Save user message (the last one) and assistant response

@@ -1,6 +1,11 @@
 import { generateText } from "ai";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
 import { parseJsonObjectFromText } from "@/lib/ai/json-response";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
+import {
+  REQUEST_FINGERPRINT_VERSION,
+  extractAnthropicCacheMetrics,
+} from "@/lib/ai/cache-metadata";
 import {
   buildSemanticCacheKey,
   getCachedText,
@@ -54,6 +59,7 @@ export async function runParallelReviews({
         system,
         prompt,
       });
+      const cacheKeyPrefix = cacheKey.slice(0, 12);
 
       const cached = await getCachedText({
         supabase,
@@ -65,6 +71,7 @@ export async function runParallelReviews({
 
       let text: string;
       let usage;
+      let providerMetadata;
       let cacheHit = false;
 
       if (cached) {
@@ -78,9 +85,13 @@ export async function runParallelReviews({
           prompt,
           maxOutputTokens,
           abortSignal,
+          providerOptions: modelName.includes("claude")
+            ? ANTHROPIC_PROMPT_CACHE_LONG
+            : undefined,
         });
         text = generated.text;
         usage = generated.usage;
+        providerMetadata = generated.providerMetadata;
 
         await setCachedText({
           supabase,
@@ -94,6 +105,8 @@ export async function runParallelReviews({
           ttlHours: 48,
         });
       }
+      const { cacheReadInputTokens, cacheCreationInputTokens } =
+        extractAnthropicCacheMetrics(providerMetadata);
 
       await recordAiUsage({
         supabase,
@@ -105,7 +118,15 @@ export async function runParallelReviews({
         promptChars: prompt.length,
         completionChars: text.length,
         usage,
-        metadata: { modelKey: key, cacheHit },
+        metadata: {
+          modelKey: key,
+          cacheHit,
+          cacheLayer: "semantic-db",
+          cacheKeyPrefix,
+          cacheReadInputTokens,
+          cacheCreationInputTokens,
+          requestFingerprintVersion: REQUEST_FINGERPRINT_VERSION,
+        },
       });
 
       try {

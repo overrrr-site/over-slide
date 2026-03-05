@@ -40,6 +40,7 @@ ${BASE_STYLES}
 - \`.slide--green\` または \`.slide--navy\` 背景
 - 大きなセクションタイトル + 説明文
 - \`.flex-col-center\` で中央配置
+- ステートメント（Mission/Vision）もこのカテゴリ：\`.statement-label\` + \`.statement-text\` を使用
 
 例:
 \`\`\`html
@@ -53,9 +54,12 @@ ${BASE_STYLES}
 
 ### content（1カラムコンテンツ）
 - \`.title-bar\` でタイトルバー
+- タイトルバーの直下に \`.message-area\`（キーメッセージ＋補足説明）を配置
 - 本文は \`.body-text\` または \`.bullet-list\`
 - テーブルがある場合は \`.data-table\` を使用
 - \`.info-box\` で重要ポイントを強調
+- タイムライン（\`.timeline-track\`）や人物紹介（\`.person-area\` + \`.person-message\`）もこのカテゴリ
+- グラフ（\`.chart-container\` + SVG）を全画面で使う場合もこのカテゴリ
 
 例:
 \`\`\`html
@@ -63,28 +67,36 @@ ${BASE_STYLES}
   <div class="title-bar">
     <h2 class="slide-title">市場分析の結果</h2>
   </div>
+  <div class="message-area">
+    <p class="key-message">国内SaaS市場は年率18%で成長、今が参入の好機</p>
+    <p class="caption">市場環境・競合状況・成長余地の3つの観点から分析した結果をまとめます。</p>
+  </div>
   <div class="content-area">
     <ul class="bullet-list">
       <li>国内市場は年率15%で成長中</li>
       <li>主要3社がシェアの60%を占有</li>
       <li>新規参入の障壁は低下傾向</li>
     </ul>
-    <div class="info-box" style="margin-top:auto;">
-      <p class="body-text"><strong>ポイント:</strong> 早期参入が競争優位の鍵となる</p>
-    </div>
   </div>
 </div>
 \`\`\`
 
-### two-column（2カラム比較）
-- \`.title-bar\` + \`.grid-2col\`
+### two-column（2カラム）
+- \`.title-bar\` + \`.message-area\` + \`.grid-2col\`
+- タイトルバーの直下にメッセージエリアを配置
 - 左右にそれぞれ情報を配置
+- テキスト＋メディア（画像/グラフ）: 片側にテキスト・箇条書き、もう片側に\`.chart-container\`でグラフやイメージ
+- ステートメント: 左に\`.statement-text\`、右に説明文
 
-例:
+対比の例:
 \`\`\`html
 <div class="slide">
   <div class="title-bar">
     <h2 class="slide-title">現状 vs 提案</h2>
+  </div>
+  <div class="message-area">
+    <p class="key-message">業務自動化により、コスト60%削減とエラー撲滅を実現</p>
+    <p class="caption">現状の手作業プロセスと提案する自動化ソリューションを比較します。</p>
   </div>
   <div class="grid-2col">
     <div>
@@ -105,67 +117,32 @@ ${BASE_STYLES}
 </div>
 \`\`\`
 
-### visual（グラフ・ビジュアル重視）
-- SVGでグラフを直接描画する
-- \`.chart-container\` でグラフを配置
-- 棒グラフ、円グラフ、折れ線グラフなどをSVGで作成
-
-棒グラフ例:
+テキスト＋グラフの例:
 \`\`\`html
 <div class="slide">
   <div class="title-bar">
-    <h2 class="slide-title">売上推移（四半期別）</h2>
+    <h2 class="slide-title">売上推移と分析</h2>
   </div>
-  <div class="chart-container">
-    <svg viewBox="0 0 600 300" width="600" height="300">
-      <!-- Y軸ラベル -->
-      <text x="30" y="30" font-size="11" fill="#666" text-anchor="end">200</text>
-      <text x="30" y="100" font-size="11" fill="#666" text-anchor="end">150</text>
-      <text x="30" y="170" font-size="11" fill="#666" text-anchor="end">100</text>
-      <text x="30" y="240" font-size="11" fill="#666" text-anchor="end">50</text>
-      <!-- グリッド線 -->
-      <line x1="40" y1="30" x2="580" y2="30" stroke="#E8D5C4" stroke-width="0.5"/>
-      <line x1="40" y1="100" x2="580" y2="100" stroke="#E8D5C4" stroke-width="0.5"/>
-      <line x1="40" y1="170" x2="580" y2="170" stroke="#E8D5C4" stroke-width="0.5"/>
-      <line x1="40" y1="240" x2="580" y2="240" stroke="#E8D5C4" stroke-width="0.5"/>
-      <!-- 棒グラフ -->
-      <rect x="80" y="170" width="80" height="100" rx="4" fill="#1A2B4A"/>
-      <rect x="200" y="100" width="80" height="170" rx="4" fill="#1A2B4A"/>
-      <rect x="320" y="60" width="80" height="210" rx="4" fill="#1A2B4A"/>
-      <rect x="440" y="30" width="80" height="240" rx="4" fill="#6B8E7F"/>
-      <!-- X軸ラベル -->
-      <text x="120" y="275" font-size="12" fill="#2A2A2A" text-anchor="middle">Q1</text>
-      <text x="240" y="275" font-size="12" fill="#2A2A2A" text-anchor="middle">Q2</text>
-      <text x="360" y="275" font-size="12" fill="#2A2A2A" text-anchor="middle">Q3</text>
-      <text x="480" y="275" font-size="12" fill="#2A2A2A" text-anchor="middle">Q4</text>
-      <!-- 値ラベル -->
-      <text x="120" y="165" font-size="12" fill="#1A2B4A" text-anchor="middle" font-weight="600">100</text>
-      <text x="240" y="95" font-size="12" fill="#1A2B4A" text-anchor="middle" font-weight="600">150</text>
-      <text x="360" y="55" font-size="12" fill="#1A2B4A" text-anchor="middle" font-weight="600">180</text>
-      <text x="480" y="25" font-size="12" fill="#6B8E7F" text-anchor="middle" font-weight="600">200</text>
-    </svg>
+  <div class="grid-2col" style="align-items:center;">
+    <div>
+      <p class="body-text" style="margin-bottom:16px;">前年比120%の成長を達成。</p>
+      <ul class="bullet-list">
+        <li>新規顧客獲得が主因</li>
+        <li>リテンション率も改善</li>
+      </ul>
+    </div>
+    <div class="chart-container" style="background:var(--white); border-radius:12px; border:1px solid var(--beige); min-height:280px;">
+      <svg viewBox="0 0 400 250" width="400" height="250">
+        <!-- グラフSVGをここに配置 -->
+      </svg>
+    </div>
   </div>
 </div>
 \`\`\`
 
-円グラフ例:
-\`\`\`html
-<svg viewBox="0 0 300 300" width="240" height="240">
-  <!-- 60% -->
-  <circle cx="150" cy="150" r="120" fill="none" stroke="#1A2B4A" stroke-width="40"
-    stroke-dasharray="452.4 753.6" stroke-dashoffset="0" transform="rotate(-90 150 150)"/>
-  <!-- 25% -->
-  <circle cx="150" cy="150" r="120" fill="none" stroke="#6B8E7F" stroke-width="40"
-    stroke-dasharray="188.5 753.6" stroke-dashoffset="-452.4" transform="rotate(-90 150 150)"/>
-  <!-- 15% -->
-  <circle cx="150" cy="150" r="120" fill="none" stroke="#E8D5C4" stroke-width="40"
-    stroke-dasharray="113.1 753.6" stroke-dashoffset="-640.9" transform="rotate(-90 150 150)"/>
-  <text x="150" y="145" text-anchor="middle" font-size="28" font-weight="700" fill="#1A2B4A">60%</text>
-  <text x="150" y="170" text-anchor="middle" font-size="12" fill="#666">市場シェア</text>
-</svg>
-\`\`\`
-
 ### data（KPI・数値ハイライト）
+- \`.title-bar\` + \`.message-area\` + \`.kpi-grid\`
+- タイトルバーの直下にメッセージエリアを配置し、数値の意味を補足
 - \`.kpi-grid\` + \`.kpi-card\` でカードを並べる
 - \`data-count\` 属性でグリッド列数を自動設定（2〜4）
 - \`.kpi-value\`, \`.kpi-label\`, \`.kpi-unit\` で値・ラベル・単位
@@ -175,6 +152,10 @@ ${BASE_STYLES}
 <div class="slide">
   <div class="title-bar">
     <h2 class="slide-title">主要KPI</h2>
+  </div>
+  <div class="message-area">
+    <p class="key-message">全3指標が目標を上回り、事業は順調に推移</p>
+    <p class="caption">2025年度上半期の実績値。前年同期比で大幅な改善を達成。</p>
   </div>
   <div class="kpi-grid" data-count="3">
     <div class="kpi-card kpi-card--navy">
@@ -196,6 +177,8 @@ ${BASE_STYLES}
 \`\`\`
 
 ### closing（まとめ・ネクストステップ）
+- \`.title-bar--green\` + \`.message-area\` + コンテンツ
+- タイトルバーの直下にメッセージエリアを配置
 - \`.numbered-list\` でステップを表示
 - または \`.bullet-list\` でまとめポイント
 
@@ -204,6 +187,10 @@ ${BASE_STYLES}
 <div class="slide">
   <div class="title-bar title-bar--green">
     <h2 class="slide-title">Next Steps</h2>
+  </div>
+  <div class="message-area">
+    <p class="key-message">3ステップで段階的に導入し、4月の本番稼働を目指す</p>
+    <p class="caption">各ステップの完了条件を明確にし、着実に進めます。</p>
   </div>
   <div class="content-area">
     <ol class="numbered-list">
@@ -273,6 +260,8 @@ ${BASE_STYLES}
 6. **ブランドカラーを一貫して使う** — navy, green, beige のCSS変数を使用
 7. **すべてのスライドに \`.slide-number\` でページ番号を入れる**（表紙は除く）
 8. **CSSクラスを最大限活用** — inline style は最小限に
-9. **テーブルやグラフがあるコンテンツページでも、タイトルバーの下に簡潔な説明文（1〜2行）を入れてから図表を配置する**
-10. **SVGはviewBox属性を必ず設定し、適切なサイズで描画する**
+9. **SVGはviewBox属性を必ず設定し、適切なサイズで描画する**
+10. **タイトル ≠ キーメッセージ** — タイトルはスライドの「お題」（見出し）、キーメッセージは「一番伝えたいこと」（結論・主張）。必ず別の内容にする
+11. **コンテンツスライドには必ず \`.message-area\` を配置する** — タイトルバーの直下・コンテンツの上に、キーメッセージ（\`.key-message\`、1行）＋ 補足説明（\`.caption\`、1〜2行）を入れる。特殊レイアウト（人物紹介・ステートメント・数値ハイライト単体）は除く
+12. **キーフレーズの活用** — 入力にキーフレーズが含まれている場合、その表現をスライドのキーメッセージや見出しに自然に織り込む。議論から生まれた印象的な表現を活かすことで、提案の説得力が増す
 `;

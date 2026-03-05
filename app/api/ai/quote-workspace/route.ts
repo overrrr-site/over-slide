@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateObject } from "ai";
 import { parseJsonWithSchema } from "@/lib/api/validation";
 import { requireAuth } from "@/lib/api/auth";
 import { withErrorHandling } from "@/lib/api/error";
 import { sonnet } from "@/lib/ai/anthropic";
+import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
+import { cachedGenerateObject } from "@/lib/ai/cached-generation";
+import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
 import { buildPastQuotesContext } from "@/lib/quotes/past-quotes";
 import {
@@ -12,6 +14,7 @@ import {
 } from "@/lib/ai/prompts/quote-workspace";
 import {
   quoteWorkspaceRequestSchema,
+  type QuoteWorkspaceResponse,
   quoteWorkspaceResponseSchema,
   sanitizeWorkspaceProjectTypeIds,
 } from "@/lib/quotes/workspace-schema";
@@ -70,12 +73,28 @@ export async function POST(request: NextRequest) {
               meaningfulCurrentItems
             );
 
-      const { object, usage } = await generateObject({
+      const {
+        object,
+        usage,
+        providerMetadata,
+        cacheHit,
+        cacheLayer,
+        cacheKeyPrefix,
+        requestFingerprintVersion,
+      } = await cachedGenerateObject<QuoteWorkspaceResponse>({
+        supabase,
+        teamId,
+        endpoint: "/api/ai/quote-workspace",
+        modelName: "claude-sonnet-4-5-20250929",
         model: sonnet,
         schema: quoteWorkspaceResponseSchema,
         prompt,
         maxOutputTokens: 4096,
+        providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
+        cacheMetadata: { mode: body.mode },
       });
+      const { cacheReadInputTokens, cacheCreationInputTokens } =
+        extractAnthropicCacheMetrics(providerMetadata);
 
       const suggestedProjectTypes = sanitizeWorkspaceProjectTypeIds(
         object.suggestedProjectTypes
@@ -107,6 +126,12 @@ export async function POST(request: NextRequest) {
           reference_materials: referenceMaterials.length,
           current_items: meaningfulCurrentItems.length,
           draft_items: meaningfulDraftItems.length,
+          cacheHit,
+          cacheLayer,
+          cacheKeyPrefix,
+          cacheReadInputTokens,
+          cacheCreationInputTokens,
+          requestFingerprintVersion,
         },
       });
 

@@ -1,4 +1,5 @@
 import type { LanguageModelUsage } from "ai";
+import { buildStandardCacheMetadata } from "@/lib/ai/cache-metadata";
 
 type SupabaseLike = {
   from: (table: string) => {
@@ -109,6 +110,8 @@ export async function recordAiUsage({
     const outputTokens = asNumber(usage?.outputTokens);
     const totalTokens = asNumber(usage?.totalTokens);
 
+    const normalizedMetadata = buildStandardCacheMetadata(metadata);
+
     const payload = {
       team_id: resolvedTeamId,
       user_id: userId,
@@ -122,7 +125,7 @@ export async function recordAiUsage({
       total_tokens: totalTokens,
       prompt_chars: asNumber(promptChars),
       completion_chars: asNumber(completionChars),
-      request_metadata: metadata,
+      request_metadata: normalizedMetadata,
     };
 
     const { error } = await db.from("ai_usage_logs").insert(payload);

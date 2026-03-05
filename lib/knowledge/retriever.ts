@@ -31,7 +31,7 @@ export async function searchKnowledge(
 ): Promise<RetrievedChunk[]> {
   const { teamId, chunkTypes, purpose, tags, limit = 5, threshold = 0.3 } = options;
 
-  const queryEmbedding = await embedQuery(query);
+  const queryEmbedding = await embedQuery(query, teamId);
   const supabase = await createClient();
 
   // Use RPC for vector similarity search

@@ -55,17 +55,8 @@ export const WORKFLOW_STEPS = [
   { id: 6, name: "最終レビュー", path: "design-review" },
 ] as const;
 
-/** ドキュメントモードで変わるステップ名（id をキーに上書き） */
-export const DOCUMENT_STEP_NAMES: Partial<Record<number, string>> = {
-  5: "文書生成",
-};
-
-/** output_type に応じたワークフローステップを返す */
-export function getWorkflowSteps(outputType?: string) {
-  if (outputType === "document") {
-    // ドキュメントは5ステップ（最終レビューをスキップ）
-    return WORKFLOW_STEPS.filter((s) => s.id <= 5);
-  }
+/** ワークフローステップを返す */
+export function getWorkflowSteps() {
   return [...WORKFLOW_STEPS];
 }
 

@@ -48,7 +48,11 @@ export function buildBriefSheetPrompt(tone: string = "hybrid"): string {
   "goal": "ゴール（成功の定義）",
   "constraints": "制約条件（予算/期間/技術/NG事項）",
   "research_topics": "リサーチで確認すべきこと（不確定要素のリスト）",
-  "structure_draft": "構成の骨格案（下記のトーン指示に従って構成すること）"
+  "structure_draft": "構成の骨格案（下記のトーン指示に従って構成すること）",
+  "reasoning_chain": "結論に至った思考の流れ",
+  "rejected_alternatives": "検討したが却下した選択肢とその理由",
+  "key_expressions": "議論中に生まれた印象的な表現・フレーズ",
+  "discussion_note": "議論全体を物語形式でまとめた要約"
 }
 
 ${toneInstruction}
@@ -61,6 +65,12 @@ ${NATURAL_WRITING_RULES}
 - structure_draftは選択されたトーンに合わせた提案の流れを具体的に書く
 - 全フィールドを途中で打ち切らず、最後まで完結した文章にすること
 - 特にhypothesisとstructure_draftは省略せず書き切ること
+
+## 新フィールドの記入ガイド
+- reasoning_chain: 「なぜこの方向性になったか」の論理の流れを時系列で記述する。議論の中で方向性が変わった場合はその転換点も含める
+- rejected_alternatives: 議論の中で出たが採用しなかった代替案と、その理由を明示する。「〇〇案→△△の理由で不採用」の形式で
+- key_expressions: 議論中にユーザーまたはAIが使った、提案書に活かせる印象的な表現やフレーズを列挙する。キャッチコピー候補、メタファー、パワーワードなど
+- discussion_note: 議論全体のナラティブ。「何を話し、どう結論に至り、何を外したか」を第三者が読んで追体験できる形式で書く。200〜400文字程度
 `;
 }
 

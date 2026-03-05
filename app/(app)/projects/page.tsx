@@ -32,13 +32,12 @@ export default async function ProjectsListPage() {
     .select("id, title, client_name, status, current_step, output_type, updated_at")
     .order("updated_at", { ascending: false });
 
-  const stepName = (step: number, outputType?: string) => {
-    const steps = getWorkflowSteps(outputType);
+  const steps = getWorkflowSteps();
+  const totalSteps = steps.length;
+  const stepName = (step: number) => {
     if (step > steps[steps.length - 1].id) return "完了";
     return steps.find((s) => s.id === step)?.name || "";
   };
-
-  const totalStepsFor = (outputType?: string) => getWorkflowSteps(outputType).length;
 
   return (
     <div className="mx-auto w-full max-w-6xl overflow-auto p-6">
@@ -86,18 +85,15 @@ export default async function ProjectsListPage() {
                 </Badge>
               </CardHeader>
               <CardContent>
-                <ProgressBar current={Math.min(project.current_step, totalStepsFor(project.output_type))} total={totalStepsFor(project.output_type)} />
+                <ProgressBar current={Math.min(project.current_step, totalSteps)} total={totalSteps} />
                 <p className="mt-1.5 text-xs text-text-secondary">
-                  現在: {stepName(project.current_step, project.output_type)}
+                  現在: {stepName(project.current_step)}
                 </p>
               </CardContent>
               <CardFooter className="justify-between">
                 <span className="flex items-center gap-1">
-                  <Icon
-                    icon={project.output_type === "document" ? "mdi:file-document-outline" : "mdi:presentation"}
-                    className="h-3.5 w-3.5"
-                  />
-                  {project.output_type === "document" ? "ドキュメント" : "スライド"}
+                  <Icon icon="mdi:presentation" className="h-3.5 w-3.5" />
+                  スライド
                 </span>
                 <span className="flex items-center gap-2">
                   <span>{new Date(project.updated_at).toLocaleDateString("ja-JP")}</span>

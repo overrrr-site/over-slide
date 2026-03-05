@@ -2,8 +2,7 @@
 
 import { useRef, type FormEvent, type RefObject } from "react";
 import { Icon } from "@iconify/react";
-import type { DiscussionMode, SimpleDiscussionMessage } from "../types";
-import { ModeSuggestionCard } from "./mode-suggestion-card";
+import type { SimpleDiscussionMessage } from "../types";
 import { MarkdownText } from "./markdown-text";
 import { stripMarkers } from "../hooks/use-discussion-mode";
 
@@ -20,7 +19,6 @@ interface SingleChatSectionProps {
   isStreaming: boolean;
   inputValue: string;
   generatingBrief: boolean;
-  suggestedMode: DiscussionMode | null;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   uploadedFiles: UploadedFileItem[];
   uploading: boolean;
@@ -32,8 +30,6 @@ interface SingleChatSectionProps {
   onFileDelete: (fileId: string) => void;
   onGenerateBriefSheet: () => void;
   onCompleteDiscussion: () => void;
-  onAcceptSuggestion: () => void;
-  onDismissSuggestion: () => void;
 }
 
 export function SingleChatSection({
@@ -41,7 +37,6 @@ export function SingleChatSection({
   isStreaming,
   inputValue,
   generatingBrief,
-  suggestedMode,
   messagesEndRef,
   uploadedFiles,
   uploading,
@@ -53,8 +48,6 @@ export function SingleChatSection({
   onFileDelete,
   onGenerateBriefSheet,
   onCompleteDiscussion,
-  onAcceptSuggestion,
-  onDismissSuggestion,
 }: SingleChatSectionProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   return (
@@ -104,16 +97,11 @@ export function SingleChatSection({
         )}
 
         <div className="mx-auto max-w-2xl space-y-4">
-          {messages.map((message, index) => {
+          {messages.map((message) => {
             const displayText =
               message.role === "assistant"
                 ? stripMarkers(message.text)
                 : message.text;
-
-            const showSuggestion =
-              suggestedMode &&
-              message.role === "assistant" &&
-              index === messages.length - 1;
 
             return (
               <div key={message.id}>
@@ -134,14 +122,6 @@ export function SingleChatSection({
                     )}
                   </div>
                 </div>
-
-                {showSuggestion && (
-                  <ModeSuggestionCard
-                    suggestedMode={suggestedMode}
-                    onAccept={onAcceptSuggestion}
-                    onDismiss={onDismissSuggestion}
-                  />
-                )}
               </div>
             );
           })}
