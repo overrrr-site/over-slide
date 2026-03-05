@@ -252,6 +252,45 @@ export const contentChart: SlideTemplate = {
   constraints: { maxTotalChars: 150 },
 };
 
+/* ─── Photo Background + Dark Overlay ─── */
+
+export const contentPhotoBg: SlideTemplate = {
+  id: "content-photo-bg",
+  name: "コンテンツ：背景画像＋オーバーレイ",
+  description: "全面背景写真に暗めオーバーレイをかけ、白文字でコンテンツを載せる。ビジュアルインパクトが必要なスライドに。",
+  category: "content",
+  html: `<div class="slide" style="padding:0;">
+  <div class="slide-bg-image">
+    {{image}}
+  </div>
+  <div class="slide-bg-overlay"></div>
+  <div class="slide-bg-content">
+    <div class="title-bar">
+      <h2 class="slide-title">{{title}}</h2>
+    </div>
+    <div class="message-area">
+      <p class="key-message">{{key_message}}</p>
+      <p class="caption">{{description}}</p>
+    </div>
+    <div class="content-area">
+      <ul class="bullet-list">
+        {{bullets}}
+      </ul>
+    </div>
+    <span class="slide-number">{{page_number}}</span>
+  </div>
+</div>`,
+  slots: [
+    { name: "image", label: "背景画像プレースホルダー", type: "image", required: false },
+    { name: "title", label: "タイトル", type: "text", maxChars: 30, required: true },
+    { name: "key_message", label: "キーメッセージ", type: "text", maxChars: 60, required: false },
+    { name: "description", label: "補足説明", type: "text", maxChars: 100, required: false },
+    { name: "bullets", label: "箇条書き", type: "list", maxChars: 40, maxItems: 4, required: false },
+    { name: "page_number", label: "ページ番号", type: "text", maxChars: 3, required: false },
+  ],
+  constraints: { maxTotalChars: 350 },
+};
+
 export const contentTemplates = [
   contentBullets,
   contentBulletsIcon,
@@ -261,4 +300,5 @@ export const contentTemplates = [
   contentPerson,
   contentTimeline,
   contentChart,
+  contentPhotoBg,
 ];

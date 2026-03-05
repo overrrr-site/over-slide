@@ -175,7 +175,73 @@ export const twoColStatement: SlideTemplate = {
   constraints: { maxTotalChars: 225 },
 };
 
+/* ─── Text + Fullbleed Image (photo fills right half) ─── */
+
+export const twoColTextFullimage: SlideTemplate = {
+  id: "twocol-text-fullimage",
+  name: "2カラム：テキスト＋全面画像（右）",
+  description: "左にテキスト、右に全面写真。事例紹介・施設写真・サービスイメージなど、ビジュアル訴求に最適な2カラムの基本レイアウト。",
+  category: "two-column",
+  html: `<div class="slide" style="padding:0;">
+  <div style="display:grid; grid-template-columns:1fr 1fr; height:100%;">
+    <div style="padding:48px 32px 48px 56px; display:flex; flex-direction:column; justify-content:center;">
+      <p class="caption" style="color:var(--navy); font-weight:600;">{{subtitle}}</p>
+      <h2 style="font-family:var(--font-jp); font-size:28px; font-weight:700; line-height:1.3; margin:12px 0 20px;">{{title}}</h2>
+      <ul class="bullet-list">
+        {{bullets}}
+      </ul>
+    </div>
+    <div class="fullbleed-image">
+      {{image}}
+    </div>
+  </div>
+  <span class="slide-number">{{page_number}}</span>
+</div>`,
+  slots: [
+    { name: "subtitle", label: "キャッチコピー", type: "text", maxChars: 30, required: false },
+    { name: "title", label: "タイトル", type: "text", maxChars: 30, required: true },
+    { name: "bullets", label: "箇条書き", type: "list", maxChars: 40, maxItems: 4, required: false },
+    { name: "image", label: "画像プレースホルダー", type: "image", required: false },
+    { name: "page_number", label: "ページ番号", type: "text", maxChars: 3, required: false },
+  ],
+  constraints: { maxTotalChars: 250 },
+};
+
+/* ─── Fullbleed Image + Text (photo fills left half) ─── */
+
+export const twoColFullimageText: SlideTemplate = {
+  id: "twocol-fullimage-text",
+  name: "2カラム：全面画像（左）＋テキスト",
+  description: "左に全面写真、右にテキスト。テキスト＋全面画像の左右入れ替え版。",
+  category: "two-column",
+  html: `<div class="slide" style="padding:0;">
+  <div style="display:grid; grid-template-columns:1fr 1fr; height:100%;">
+    <div class="fullbleed-image">
+      {{image}}
+    </div>
+    <div style="padding:48px 56px 48px 32px; display:flex; flex-direction:column; justify-content:center;">
+      <p class="caption" style="color:var(--navy); font-weight:600;">{{subtitle}}</p>
+      <h2 style="font-family:var(--font-jp); font-size:28px; font-weight:700; line-height:1.3; margin:12px 0 20px;">{{title}}</h2>
+      <ul class="bullet-list">
+        {{bullets}}
+      </ul>
+    </div>
+  </div>
+  <span class="slide-number">{{page_number}}</span>
+</div>`,
+  slots: [
+    { name: "image", label: "画像プレースホルダー", type: "image", required: false },
+    { name: "subtitle", label: "キャッチコピー", type: "text", maxChars: 30, required: false },
+    { name: "title", label: "タイトル", type: "text", maxChars: 30, required: true },
+    { name: "bullets", label: "箇条書き", type: "list", maxChars: 40, maxItems: 4, required: false },
+    { name: "page_number", label: "ページ番号", type: "text", maxChars: 3, required: false },
+  ],
+  constraints: { maxTotalChars: 250 },
+};
+
 export const twoColumnTemplates = [
+  twoColTextFullimage,
+  twoColFullimageText,
   twoColComparison,
   twoColFeatureGrid,
   twoColTextMedia,

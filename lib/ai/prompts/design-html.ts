@@ -81,11 +81,83 @@ ${BASE_STYLES}
 </div>
 \`\`\`
 
+**背景画像＋暗めオーバーレイ＋白文字**
+全面に写真を敷き、暗いオーバーレイ越しに白文字でコンテンツを載せるレイアウト。ビジュアルインパクトが必要なコンテンツスライドに使う。\`style="padding:0;"\` でスライド余白をリセットし、\`.slide-bg-image\` + \`.slide-bg-overlay\` + \`.slide-bg-content\` の3層構成にする。
+
+例:
+\`\`\`html
+<div class="slide" style="padding:0;">
+  <div class="slide-bg-image">
+    <div class="image-placeholder" style="width:100%;height:100%;border-radius:0;min-height:auto;">都市のスカイライン</div>
+  </div>
+  <div class="slide-bg-overlay"></div>
+  <div class="slide-bg-content">
+    <div class="title-bar">
+      <h2 class="slide-title">市場の成長ポテンシャル</h2>
+    </div>
+    <div class="message-area">
+      <p class="key-message">国内DX市場は2030年に3倍規模へ拡大</p>
+      <p class="caption">今後5年間の市場予測と参入戦略をまとめます。</p>
+    </div>
+    <div class="content-area">
+      <ul class="bullet-list">
+        <li>市場規模は年率18%で成長中</li>
+        <li>中小企業のDX導入率はまだ23%</li>
+        <li>先行投資で競合優位性を確保</li>
+      </ul>
+    </div>
+    <span class="slide-number">5</span>
+  </div>
+</div>
+\`\`\`
+
 ### two-column（2カラム）
-- \`.title-bar\` + \`.message-area\` + \`.grid-2col\`
-- タイトルバーの直下にメッセージエリアを配置
-- 左右にそれぞれ情報を配置
-- テキスト＋メディア（画像/グラフ）: 片側にテキスト・箇条書き、もう片側に\`.chart-container\`でグラフやイメージ
+
+**基本レイアウト: テキスト＋全面画像**
+2カラムの基本は「テキスト＋全面画像」レイアウト。写真やイメージが効果的なスライド（事例紹介、施設写真、サービスイメージ、製品紹介等）ではこのレイアウトを優先して使う。\`style="padding:0;"\` でスライド余白をリセットし、片側の画像がスライド端まで広がる。
+
+テキスト（左）＋全面画像（右）の例:
+\`\`\`html
+<div class="slide" style="padding:0;">
+  <div style="display:grid; grid-template-columns:1fr 1fr; height:100%;">
+    <div style="padding:48px 32px 48px 56px; display:flex; flex-direction:column; justify-content:center;">
+      <p class="caption" style="color:var(--navy); font-weight:600;">コーティングをラグジュアリーホテルの付加価値に</p>
+      <h2 style="font-family:var(--font-jp); font-size:28px; font-weight:700; line-height:1.3; margin:12px 0 20px;">コーティングスパ</h2>
+      <ul class="bullet-list">
+        <li>温水・湿潤・閉鎖空間という条件が重なる環境</li>
+        <li>金属接触部にコーティングを適用し、衛生管理負荷を低減</li>
+      </ul>
+    </div>
+    <div class="fullbleed-image">
+      <div class="image-placeholder" style="width:100%;height:100%;border-radius:0;min-height:auto;">ラグジュアリーホテルのスパ写真</div>
+    </div>
+  </div>
+  <span class="slide-number">3</span>
+</div>
+\`\`\`
+
+全面画像（左）＋テキスト（右）の例（左右入れ替え版）:
+\`\`\`html
+<div class="slide" style="padding:0;">
+  <div style="display:grid; grid-template-columns:1fr 1fr; height:100%;">
+    <div class="fullbleed-image">
+      <div class="image-placeholder" style="width:100%;height:100%;border-radius:0;min-height:auto;">最新のオフィス空間</div>
+    </div>
+    <div style="padding:48px 56px 48px 32px; display:flex; flex-direction:column; justify-content:center;">
+      <p class="caption" style="color:var(--navy); font-weight:600;">働き方改革の最前線</p>
+      <h2 style="font-family:var(--font-jp); font-size:28px; font-weight:700; line-height:1.3; margin:12px 0 20px;">次世代オフィス</h2>
+      <ul class="bullet-list">
+        <li>フレキシブルな空間設計で生産性向上</li>
+        <li>環境負荷を40%削減した設備導入</li>
+      </ul>
+    </div>
+  </div>
+  <span class="slide-number">4</span>
+</div>
+\`\`\`
+
+**対比レイアウト**
+- \`.title-bar\` + \`.message-area\` + \`.grid-2col\` で左右に情報を配置
 - ステートメント: 左に\`.statement-text\`、右に説明文
 
 対比の例:
@@ -117,7 +189,7 @@ ${BASE_STYLES}
 </div>
 \`\`\`
 
-テキスト＋グラフの例:
+**テキスト＋グラフ**（グラフ・図表がある場合はこちら）:
 \`\`\`html
 <div class="slide">
   <div class="title-bar">
@@ -261,7 +333,12 @@ ${BASE_STYLES}
 7. **すべてのスライドに \`.slide-number\` でページ番号を入れる**（表紙は除く）
 8. **CSSクラスを最大限活用** — inline style は最小限に
 9. **SVGはviewBox属性を必ず設定し、適切なサイズで描画する**
-10. **タイトル ≠ キーメッセージ** — タイトルはスライドの「お題」（見出し）、キーメッセージは「一番伝えたいこと」（結論・主張）。必ず別の内容にする
+10. **キーメッセージは"それだけ読めば要旨が分かる一文"にする** — キーメッセージ（\`.key-message\`）はスライドで最も重要な要素。以下を厳守：
+    - タイトルはスライドの「お題」（見出し）、キーメッセージは「結論・主張・要点」。必ず別の表現・別の内容にする
+    - **自己完結する文にする**：キーメッセージだけ読んで意味が通ること。「以下のようになる」「次の通り」「下記の点が挙げられる」など、スライド本文を読まないと意味が分からない表現は禁止
+    - **具体的な内容を含める**：数値・固有名・結論など、抽象的でない情報を入れる
+    - 悪い例：「導入効果について」「以下のメリットがある」「主な特徴は次の通り」
+    - 良い例：「業務自動化により月80時間の工数を95%削減」「顧客満足度が前年比20pt向上し業界トップに」「3つの差別化要因が競合との決定的な違いを生む」
 11. **コンテンツスライドには必ず \`.message-area\` を配置する** — タイトルバーの直下・コンテンツの上に、キーメッセージ（\`.key-message\`、1行）＋ 補足説明（\`.caption\`、1〜2行）を入れる。特殊レイアウト（人物紹介・ステートメント・数値ハイライト単体）は除く
 12. **キーフレーズの活用** — 入力にキーフレーズが含まれている場合、その表現をスライドのキーメッセージや見出しに自然に織り込む。議論から生まれた印象的な表現を活かすことで、提案の説得力が増す
 `;

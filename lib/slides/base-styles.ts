@@ -364,6 +364,64 @@ export const BASE_STYLES = `
   max-height: 100%;
 }
 
+/* ─── Fullbleed Image (half-slide photo) ─── */
+.fullbleed-image {
+  position: relative;
+  overflow: hidden;
+}
+.fullbleed-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fullbleed-image .image-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  min-height: auto;
+}
+
+/* ─── Photo Background + Dark Overlay ─── */
+.slide-bg-image {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.slide-bg-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.slide-bg-image .image-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  min-height: auto;
+}
+.slide-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1;
+}
+.slide-bg-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 48px 56px;
+  color: var(--white);
+}
+.slide-bg-content .slide-title { color: var(--white); }
+.slide-bg-content .key-message { color: var(--white); }
+.slide-bg-content .caption { color: rgba(255, 255, 255, 0.8); }
+.slide-bg-content .body-text { color: var(--white); }
+.slide-bg-content .bullet-list li { color: var(--white); }
+.slide-bg-content .bullet-list li::before { background: var(--white); }
+.slide-bg-content .title-bar { border-bottom-color: rgba(255, 255, 255, 0.3); }
+.slide-bg-content .slide-number { color: rgba(255, 255, 255, 0.6); }
+
 /* ─── Slide Number ─── */
 .slide-number {
   position: absolute;

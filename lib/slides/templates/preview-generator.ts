@@ -267,6 +267,37 @@ const SAMPLE_DATA: Record<string, Record<string, string>> = {
   },
   "closing-thank-you": {},
 
+  // Content: Photo Background + Dark Overlay
+  "content-photo-bg": {
+    image: `<div class="image-placeholder" style="width:100%;height:100%;border-radius:0;min-height:auto;">都市のスカイライン</div>`,
+    title: "市場の成長ポテンシャル",
+    key_message: "国内DX市場は2030年に3倍規模へ拡大見込み",
+    description: "今後5年間の市場予測と当社の参入戦略をまとめます。",
+    bullets: `<li>市場規模は年率18%で成長中、2030年に1.2兆円規模</li>
+      <li>中小企業のDX導入率はまだ23%、成長余地が大きい</li>
+      <li>先行投資で競合優位性を確保し、シェア15%を目指す</li>`,
+    page_number: "5",
+  },
+  // Two-column: Text + Fullbleed Image (right)
+  "twocol-text-fullimage": {
+    subtitle: "コーティングをラグジュアリーホテルの付加価値に",
+    title: "コーティングスパ",
+    bullets: `<li>温水・湿潤・閉鎖空間という条件が重なり、バイオフィルムが形成されやすい環境</li>
+      <li>金属接触部にコーティングを適用し、衛生管理負荷を低減</li>
+      <li>ホテルチェーンと共同で実証・限定客室導入へ</li>`,
+    image: `<div class="image-placeholder" style="width:100%;height:100%;border-radius:0;min-height:auto;">ラグジュアリーホテルのスパ写真</div>`,
+    page_number: "5",
+  },
+  // Two-column: Fullbleed Image (left) + Text
+  "twocol-fullimage-text": {
+    image: `<div class="image-placeholder" style="width:100%;height:100%;border-radius:0;min-height:auto;">最新のオフィス空間</div>`,
+    subtitle: "働き方改革の最前線",
+    title: "次世代オフィス",
+    bullets: `<li>フレキシブルな空間設計で生産性を向上</li>
+      <li>環境負荷を40%削減した設備を導入</li>
+      <li>従業員満足度が92%に向上</li>`,
+    page_number: "6",
+  },
   // Two-column: Text + Media (merged from twocol-text-visual + twocol-text-image)
   "twocol-text-media": {
     title: "市場成長予測",

@@ -8,7 +8,7 @@ import type { HtmlSlide } from "./types";
 export interface ImageNeed {
   slideIndex: number;
   prompt: string;
-  placement: "right" | "left" | "background" | "inline";
+  placement: "right" | "left" | "background" | "background-dark" | "inline" | "cover-right" | "cover-left";
 }
 
 /**
@@ -39,7 +39,12 @@ ${compactJsonForPrompt(slidesSummary)}
 - 画像プロンプトは英語で記述
 - プロンプトに文字・テキスト情報を絶対に含めない（No text, no words, no letters, no numbers, no labels）
 - 写真風かイラスト風か明記する
-- placement は right, left, background, inline のいずれか
+- placement は right, left, background, background-dark, inline, cover-right, cover-left のいずれか
+- cover-right: スライドに .fullbleed-image が右側にある場合（全面画像テンプレート用）
+- cover-left: スライドに .fullbleed-image が左側にある場合（全面画像テンプレート用）
+- background-dark: スライドに .slide-bg-image がある場合（暗めオーバーレイ背景画像用）
+- .fullbleed-image を含むスライドには必ず cover-right または cover-left を使う
+- .slide-bg-image を含むスライドには必ず background-dark を使う
 
 JSON形式のみ出力（説明不要）:
 {
@@ -124,40 +129,79 @@ export async function uploadSlideImage(
 
 /**
  * Step 4: Embed an image into slide HTML.
+ *
+ * 画像は必ず .slide コンテナの「中」に挿入する。
+ * right/left は absolute で配置し、テキスト側に padding を追加して重ならないようにする。
  */
 export function embedImageInSlideHtml(
   slide: HtmlSlide,
   imageUrl: string,
   placement: ImageNeed["placement"]
 ): HtmlSlide {
+  // Cover / background-dark placements: replace .image-placeholder with actual image
+  if (placement === "cover-right" || placement === "cover-left" || placement === "background-dark") {
+    const coverImg = `<img src="${imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover;" />`;
+    const newHtml = slide.html.replace(
+      /<div\s+class="image-placeholder"[^>]*>[^<]*<\/div>/,
+      coverImg
+    );
+    return { ...slide, html: newHtml };
+  }
+
   const imgStyle = (() => {
     switch (placement) {
       case "right":
-        return 'position:absolute;right:30px;top:50%;transform:translateY(-50%);max-width:320px;max-height:340px;object-fit:cover;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);';
+        return 'position:absolute;right:24px;top:50%;transform:translateY(-50%);width:300px;height:auto;max-height:340px;object-fit:cover;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:2;';
       case "left":
-        return 'position:absolute;left:30px;top:50%;transform:translateY(-50%);max-width:320px;max-height:340px;object-fit:cover;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);';
+        return 'position:absolute;left:24px;top:50%;transform:translateY(-50%);width:300px;height:auto;max-height:340px;object-fit:cover;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:2;';
       case "background":
-        return 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.15;z-index:0;';
+        return 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.15;z-index:0;pointer-events:none;';
       case "inline":
       default:
-        return 'max-width:280px;max-height:200px;object-fit:cover;border-radius:8px;margin-top:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);';
+        return 'display:block;max-width:280px;max-height:200px;object-fit:cover;border-radius:8px;margin:12px auto 0;box-shadow:0 4px 12px rgba(0,0,0,0.1);';
     }
   })();
 
   const imgTag = `<img src="${imageUrl}" alt="" style="${imgStyle}" />`;
 
-  // For background placement, insert at the beginning of the slide
-  if (placement === "background") {
-    return {
-      ...slide,
-      html: imgTag + slide.html,
-    };
+  // テキストとの重なりを防ぐための padding 調整スタイル
+  const paddingPatch = (() => {
+    switch (placement) {
+      case "right":
+        return '<style>.slide>.content-area,.slide>.grid-2col,.slide>.bullet-list,.slide>.body-text,.slide>.kpi-grid,.slide>.message-area{padding-right:330px;}</style>';
+      case "left":
+        return '<style>.slide>.content-area,.slide>.grid-2col,.slide>.bullet-list,.slide>.body-text,.slide>.kpi-grid,.slide>.message-area{padding-left:330px;}</style>';
+      default:
+        return '';
+    }
+  })();
+
+  // .slide の閉じタグ </div> を探して、その直前に挿入する
+  const closingDivIndex = slide.html.lastIndexOf('</div>');
+  if (closingDivIndex === -1) {
+    // フォールバック: 見つからなければ末尾に追加
+    return { ...slide, html: slide.html + imgTag };
   }
 
-  // For other placements, append at the end of the slide content
+  const before = slide.html.substring(0, closingDivIndex);
+  const after = slide.html.substring(closingDivIndex);
+
+  if (placement === "background") {
+    // background: .slide の開きタグ直後に挿入
+    const openingMatch = slide.html.match(/<div\s+class="slide[^"]*"[^>]*>/);
+    if (openingMatch) {
+      const insertPos = (openingMatch.index ?? 0) + openingMatch[0].length;
+      const htmlBefore = slide.html.substring(0, insertPos);
+      const htmlAfter = slide.html.substring(insertPos);
+      return { ...slide, html: htmlBefore + imgTag + htmlAfter };
+    }
+    return { ...slide, html: imgTag + slide.html };
+  }
+
+  // right/left/inline: 閉じ </div> の直前に画像 + padding調整を挿入
   return {
     ...slide,
-    html: slide.html + imgTag,
+    html: before + paddingPatch + imgTag + after,
   };
 }
 
