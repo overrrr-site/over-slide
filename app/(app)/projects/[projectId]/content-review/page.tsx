@@ -54,6 +54,7 @@ export default function ContentReviewPage() {
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
   const [deepMode, setDeepMode] = useState(false);
   const [itemDecisions, setItemDecisions] = useState<Map<string, ItemDecision>>(new Map());
+  const [reviewId, setReviewId] = useState<string | null>(null);
   const [applyingFeedback, setApplyingFeedback] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   // Before/after comparison state
@@ -70,7 +71,7 @@ export default function ContentReviewPage() {
       const [reviewResult, structureResult] = await Promise.all([
         supabase
           .from("reviews")
-          .select("review_data")
+          .select("id, review_data, decisions, status")
           .eq("project_id", projectId)
           .eq("review_type", "content")
           .order("created_at", { ascending: false })
@@ -90,6 +91,21 @@ export default function ContentReviewPage() {
         if (rd.parallel && rd.reviews) {
           setReviews(rd.reviews);
           setSelectedTab(rd.reviews[0]?.model || null);
+        }
+        setReviewId(reviewResult.data.id);
+
+        // DB に保存された決定状態を復元
+        const savedDecisions = reviewResult.data.decisions;
+        if (savedDecisions && typeof savedDecisions === "object" && !Array.isArray(savedDecisions)) {
+          const restored = new Map<string, ItemDecision>();
+          for (const [key, value] of Object.entries(savedDecisions)) {
+            if (value === "adopted" || value === "rejected") {
+              restored.set(key, value);
+            }
+          }
+          if (restored.size > 0) {
+            setItemDecisions(restored);
+          }
         }
       }
 
@@ -162,10 +178,13 @@ export default function ContentReviewPage() {
       });
 
       if (res.ok) {
-        const { reviews: newReviews } = await res.json();
-        setReviews(newReviews);
-        setSelectedTab(newReviews[0]?.model || null);
+        const data = await res.json();
+        setReviews(data.reviews);
+        setSelectedTab(data.reviews[0]?.model || null);
         setItemDecisions(new Map());
+        if (data.reviewId) {
+          setReviewId(data.reviewId);
+        }
       }
     } catch {
       // Handle error silently
@@ -250,6 +269,16 @@ export default function ContentReviewPage() {
       setAfterPages(data.pages as PageContent[]);
       setAppliedItems(items);
       setShowResult(true);
+
+      // 決定状態を DB に保存（次回読み込み時に復元するため）
+      if (reviewId) {
+        const supabase = createClient();
+        const decisionsObj = Object.fromEntries(itemDecisions);
+        await supabase
+          .from("reviews")
+          .update({ decisions: decisionsObj, status: "applied" })
+          .eq("id", reviewId);
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setFeedbackError("反映がタイムアウトしました。もう一度お試しください。");

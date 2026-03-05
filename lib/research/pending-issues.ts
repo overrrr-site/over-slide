@@ -42,11 +42,11 @@ function normalizeIssueLine(line: string): string {
 }
 
 /**
- * リサーチメモの「追加で検討すべき論点」セクションから未解決論点を抽出する。
+ * リサーチメモの「追加調査が必要な項目」セクションから未解決論点を抽出する。
  */
 export function extractPendingIssues(markdown: string): PendingIssuesParseResult {
   const sectionMatch = markdown.match(
-    /##\s*追加で検討すべき論点\s*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/
+    /##\s*追加調査が必要な項目\s*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/
   );
 
   if (!sectionMatch) {
@@ -106,15 +106,15 @@ function isHumanRequired(marker: string): boolean {
 
 /**
  * メモ本文全体から【根拠不足...】マーカーを抽出する。
- * 「追加で検討すべき論点」セクション内のマーカーは除外する（重複防止）。
+ * 「追加調査が必要な項目」セクション内のマーカーは除外する（重複防止）。
  */
 export function extractEvidenceGaps(markdown: string): EvidenceGap[] {
   const gaps: EvidenceGap[] = [];
   const seen = new Set<string>();
 
-  // 「追加で検討すべき論点」セクションの範囲を特定して除外する
+  // 「追加調査が必要な項目」セクションの範囲を特定して除外する
   const sectionMatch = markdown.match(
-    /##\s*追加で検討すべき論点\s*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/
+    /##\s*追加調査が必要な項目\s*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/
   );
   const sectionStart = sectionMatch?.index ?? -1;
   const sectionEnd =
@@ -129,7 +129,7 @@ export function extractEvidenceGaps(markdown: string): EvidenceGap[] {
   while ((match = pattern.exec(markdown)) !== null) {
     const matchIndex = match.index;
 
-    // 「追加で検討すべき論点」セクション内のマーカーはスキップ
+    // 「追加調査が必要な項目」セクション内のマーカーはスキップ
     if (sectionStart >= 0 && matchIndex >= sectionStart && matchIndex < sectionEnd) {
       continue;
     }
@@ -158,7 +158,7 @@ export function extractEvidenceGaps(markdown: string): EvidenceGap[] {
 }
 
 /**
- * 「追加で検討すべき論点」と本文中の【根拠不足】マーカーを合算して返す。
+ * 「追加調査が必要な項目」と本文中の【根拠不足】マーカーを合算して返す。
  * 自走リサーチの停止判定に使う。
  */
 export function extractAllUnresolved(markdown: string): AllUnresolvedResult {

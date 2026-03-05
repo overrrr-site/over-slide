@@ -144,14 +144,14 @@ export async function POST(request: Request) {
         const iterationInstruction =
           iteration === 1
             ? [
-                "追加で検討すべき論点が残る場合は、必ず箇条書きで明示してください。",
-                "メモ本文中の【根拠不足】項目についても、Web検索で情報が見つかる可能性があれば積極的に調査してください。",
-                "Web検索で解消できた【根拠不足】マーカーは削除し、見つかった情報に差し替えてください。",
+                "「追加調査が必要な項目」が残る場合は、必ず箇条書きで明示してください。",
+                "【根拠不足:要Web検索】項目について、Web検索で裏付けが見つかれば「裏付けが取れた項目」に移動してください。",
+                "Web検索で解消できた【根拠不足】マーカーは削除し、見つかった情報と出典に差し替えてください。",
               ].join("\n")
             : [
-                "未解決論点と【根拠不足】項目を優先して解消してください。",
-                "Web検索で解消できた【根拠不足】マーカーは削除してください。",
-                "解消できなかった論点のみを『追加で検討すべき論点』に残してください。",
+                "「追加調査が必要な項目」の【根拠不足:要Web検索】を優先して解消してください。",
+                "裏付けが取れた項目は「裏付けが取れた項目」セクションに移動してください。",
+                "解消できなかった項目のみを「追加調査が必要な項目」に残してください。",
               ].join("\n");
 
         const knowledge = await fetchResearchKnowledgeContext({
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
           modelName: "claude-sonnet-4-5-20250929",
           model: sonnet,
           system: RESEARCH_MEMO_PROMPT,
-          prompt: `以下の情報をもとにリサーチメモを更新してください。\n\n${promptContextWithKnowledge}`,
+          prompt: `以下の情報をもとにリサーチ結果を更新してください。ブリーフの主張を検索結果で裏付けることに集中してください。\n\n${promptContextWithKnowledge}`,
           maxOutputTokens: 4096,
           providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
           cacheMetadata: { stage: "memo", iteration },

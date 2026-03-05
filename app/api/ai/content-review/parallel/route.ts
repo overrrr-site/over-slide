@@ -97,21 +97,28 @@ export async function POST(request: Request) {
       });
 
       // Save to DB with review_type = 'content'
+      let reviewId: string | null = null;
       if (projectId) {
         try {
-          await supabase.from("reviews").insert({
-            project_id: projectId,
-            version: 1,
-            review_data: { parallel: true, reviews },
-            review_type: "content",
-            status: "pending",
-          });
+          const { data: inserted } = await supabase
+            .from("reviews")
+            .insert({
+              project_id: projectId,
+              version: 1,
+              review_data: { parallel: true, reviews },
+              review_type: "content",
+              status: "pending",
+              decisions: {},
+            })
+            .select("id")
+            .single();
+          reviewId = inserted?.id ?? null;
         } catch {
           // Non-critical
         }
       }
 
-      return Response.json({ reviews });
+      return Response.json({ reviews, reviewId });
     },
     {
       context: "content-review/parallel",
