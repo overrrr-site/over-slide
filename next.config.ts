@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "puppeteer",
     "puppeteer-core",
+    "@sparticuz/chromium",
     "pdfjs-dist",
     "officeparser",
     "xlsx",

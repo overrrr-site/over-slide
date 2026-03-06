@@ -1,8 +1,8 @@
 /**
  * Convert HTML slides to a PDF buffer using Puppeteer.
  *
- * Launches a headless Chrome instance, renders all slides in a single
- * HTML document, waits for fonts to load, and prints to PDF at 16:9.
+ * - Server (Vercel etc.): uses @sparticuz/chromium + puppeteer-core
+ * - Local dev: uses full puppeteer (bundled Chrome)
  */
 
 import { buildSlideDocument, SLIDE_WIDTH, SLIDE_HEIGHT } from "./base-styles";
@@ -12,21 +12,33 @@ import type { HtmlSlide } from "./types";
 const PAGE_WIDTH_MM = 254;
 const PAGE_HEIGHT_MM = 142.88;
 
+const IS_SERVER = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+
 export interface PdfConvertOptions {
   /** Timeout in ms for the entire conversion (default: 60_000) */
   timeout?: number;
 }
 
-export async function convertSlidesToPdf(
-  slides: HtmlSlide[],
-  options: PdfConvertOptions = {}
-): Promise<Buffer> {
-  const { timeout = 60_000 } = options;
+/**
+ * Launch a headless Chrome browser.
+ * On serverless (Vercel/Lambda) uses the lightweight @sparticuz/chromium binary.
+ * Locally falls back to the full puppeteer package with its bundled Chrome.
+ */
+async function launchBrowser() {
+  if (IS_SERVER) {
+    const chromium = (await import("@sparticuz/chromium")).default;
+    const puppeteerCore = (await import("puppeteer-core")).default;
 
-  // Dynamic import — puppeteer is listed in serverExternalPackages
+    return puppeteerCore.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+  }
+
+  // Local dev: use full puppeteer
   const puppeteer = (await import("puppeteer")).default;
-
-  const browser = await puppeteer.launch({
+  return puppeteer.launch({
     headless: true,
     args: [
       "--no-sandbox",
@@ -35,9 +47,19 @@ export async function convertSlidesToPdf(
       "--font-render-hinting=none",
     ],
   });
+}
+
+export async function convertSlidesToPdf(
+  slides: HtmlSlide[],
+  options: PdfConvertOptions = {}
+): Promise<Buffer> {
+  const { timeout = 60_000 } = options;
+
+  const browser = await launchBrowser();
 
   try {
-    const page = await browser.newPage();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const page = await browser.newPage() as any;
 
     // Set viewport to slide dimensions
     await page.setViewport({
