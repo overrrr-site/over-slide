@@ -7,10 +7,15 @@ import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
 import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { windowByText } from "@/lib/ai/history-window";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
-import { compactJsonForPrompt } from "@/lib/ai/prompt-utils";
 import { WORKFLOW_STEPS } from "@/lib/utils/constants";
 import { getTeamIdForUser } from "@/lib/api/team";
 import { buildRagContext } from "@/lib/knowledge/rag-context";
+import {
+  loadResearchContext,
+  loadStructureContext,
+  loadDetailsContext,
+  loadDesignContext,
+} from "@/lib/ai/context-loaders";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Convert UI messages (parts array) to core messages (content string) */
@@ -36,124 +41,6 @@ function getStepName(step: number): string {
   return WORKFLOW_STEPS.find((s) => s.id === step)?.name || `工程${step}`;
 }
 
-/** Load current structure pages for step 2 */
-async function loadStructureContext(
-  supabase: SupabaseClient,
-  projectId: string
-): Promise<string> {
-  const { data } = await supabase
-    .from("structures")
-    .select("pages")
-    .eq("project_id", projectId)
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!data?.pages) return "";
-  return compactJsonForPrompt(data.pages);
-}
-
-/** Load current page_contents for step 3 */
-async function loadDetailsContext(
-  supabase: SupabaseClient,
-  projectId: string
-): Promise<string> {
-  // Get latest structure ID
-  const { data: structData } = await supabase
-    .from("structures")
-    .select("id")
-    .eq("project_id", projectId)
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!structData?.id) return "";
-
-  const { data: contents } = await supabase
-    .from("page_contents")
-    .select("page_number, content")
-    .eq("structure_id", structData.id)
-    .order("page_number");
-
-  if (!contents?.length) return "";
-  return compactJsonForPrompt(
-    contents.map((c) => c.content as Record<string, unknown>)
-  );
-}
-
-/** Load current HTML slides metadata for step 5 */
-async function loadDesignContext(
-  supabase: SupabaseClient,
-  projectId: string
-): Promise<string> {
-  const { data: genFile } = await supabase
-    .from("generated_files")
-    .select("slide_data")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!genFile?.slide_data) return "";
-
-  const slideData = genFile.slide_data as {
-    slides?: Array<{ index: number; slideType: string; title: string }>;
-  };
-  if (!slideData.slides?.length) return "";
-
-  // Only include metadata (not full HTML) to save tokens
-  const metadata = slideData.slides.map((s, i) => ({
-    slideIndex: i,
-    slideType: s.slideType,
-    title: s.title,
-  }));
-  return compactJsonForPrompt(metadata);
-}
-
-/** Load research memo + brief summary for step 1 */
-async function loadResearchContext(
-  supabase: SupabaseClient,
-  projectId: string
-): Promise<string> {
-  const [memoResult, briefResult] = await Promise.all([
-    supabase
-      .from("research_memos")
-      .select("raw_markdown")
-      .eq("project_id", projectId)
-      .maybeSingle(),
-    supabase
-      .from("brief_sheets")
-      .select("client_info, background, hypothesis, goal, constraints, research_topics")
-      .eq("project_id", projectId)
-      .maybeSingle(),
-  ]);
-
-  const parts: string[] = [];
-
-  if (briefResult.data) {
-    const b = briefResult.data;
-    const fields = [
-      b.client_info && `クライアント: ${b.client_info}`,
-      b.background && `背景: ${b.background}`,
-      b.hypothesis && `仮説: ${b.hypothesis}`,
-      b.goal && `ゴール: ${b.goal}`,
-      b.constraints && `制約: ${b.constraints}`,
-      b.research_topics && `調査テーマ: ${b.research_topics}`,
-    ].filter(Boolean);
-    if (fields.length > 0) {
-      parts.push(`### ブリーフシート\n${fields.join("\n")}`);
-    }
-  }
-
-  if (memoResult.data?.raw_markdown) {
-    const memo = memoResult.data.raw_markdown as string;
-    // Truncate to keep token usage reasonable
-    const truncated = memo.length > 3000 ? memo.slice(0, 3000) + "\n...（以下省略）" : memo;
-    parts.push(`### 現在のリサーチメモ\n${truncated}`);
-  }
-
-  return parts.join("\n\n");
-}
 
 /** Build system prompt with step-specific context */
 function buildSystemPrompt(

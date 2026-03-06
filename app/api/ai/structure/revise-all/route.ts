@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertInput, parseJsonBody } from "@/lib/api/validation";
-import { opus } from "@/lib/ai/anthropic";
+import { sonnet } from "@/lib/ai/anthropic";
 import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
 import { cachedGenerateText } from "@/lib/ai/cached-generation";
 import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
@@ -136,8 +136,8 @@ JSONのみ出力し、説明文は不要です。
           supabase,
           teamId,
           endpoint: "/api/ai/structure/revise-all",
-          modelName: "claude-opus-4-6",
-          model: opus,
+          modelName: "claude-sonnet-4-5-20250929",
+          model: sonnet,
           system: STRUCTURE_PROMPT,
           prompt,
           abortSignal: signal,
@@ -151,7 +151,7 @@ JSONのみ出力し、説明文は不要です。
           supabase,
           endpoint: "/api/ai/structure/revise-all",
           operation: "generateText",
-          model: "claude-opus-4-6",
+          model: "claude-sonnet-4-5-20250929",
           userId: user.id,
           teamId,
           projectId,

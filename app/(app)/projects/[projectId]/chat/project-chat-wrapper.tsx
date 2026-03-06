@@ -8,7 +8,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { useParams, usePathname } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { createClient } from "@/lib/supabase/client";
@@ -22,6 +22,8 @@ import {
 import { ProjectChatPanel } from "./project-chat-panel";
 import { ResizableHandle } from "./resizable-handle";
 
+const LEADER_STEP = 0;
+
 /** Derive step number from current URL path */
 function useCurrentStep(): number {
   const pathname = usePathname();
@@ -29,6 +31,10 @@ function useCurrentStep(): number {
     if (pathname.includes(`/${s.path}`)) return s.id;
   }
   return 1;
+}
+
+function getStepPath(step: number): string {
+  return WORKFLOW_STEPS.find((s) => s.id === step)?.path || "research";
 }
 
 const PANEL_MIN_WIDTH = 280;
@@ -65,9 +71,24 @@ function parseApply(text: string): { cleanText: string; payload: ApplyPayload | 
   }
 }
 
+/** Parse <!--DISPLAY{...}DISPLAY--> from text */
+function parseDisplay(text: string): { cleanText: string; displayStep: number | null } {
+  const match = text.match(/<!--DISPLAY([\s\S]*?)DISPLAY-->/);
+  if (!match) return { cleanText: text, displayStep: null };
+
+  try {
+    const parsed = JSON.parse(match[1]);
+    const cleanText = text.replace(/<!--DISPLAY[\s\S]*?DISPLAY-->/, "").trim();
+    return { cleanText, displayStep: parsed.step as number };
+  } catch {
+    return { cleanText: text, displayStep: null };
+  }
+}
+
 export function ProjectChatWrapper({ children }: { children: ReactNode }) {
   const { projectId } = useParams<{ projectId: string }>();
   const currentStep = useCurrentStep();
+  const router = useRouter();
 
   // Panel state
   const [isPanelOpen, setIsPanelOpen] = useState(true);
@@ -88,10 +109,16 @@ export function ProjectChatWrapper({ children }: { children: ReactNode }) {
 
   // Apply handler registered by step pages
   const applyHandlerRef = useRef<((payload: ApplyPayload) => void) | null>(null);
+  const pendingApplyRef = useRef<ApplyPayload | null>(null);
 
   const registerApplyHandler = useCallback(
     (handler: (payload: ApplyPayload) => void) => {
       applyHandlerRef.current = handler;
+      // Fire pending apply if there's one waiting after a DISPLAY navigation
+      if (pendingApplyRef.current) {
+        handler(pendingApplyRef.current);
+        pendingApplyRef.current = null;
+      }
     },
     []
   );
@@ -99,10 +126,10 @@ export function ProjectChatWrapper({ children }: { children: ReactNode }) {
   // Track which option sets have been selected (by message ID)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
 
-  // Chat messages from DB (per step)
-  const [dbMessages, setDbMessages] = useState<Record<number, ChatMessage[]>>({});
+  // Chat messages from DB (leader messages: step=0)
+  const [dbMessages, setDbMessages] = useState<ChatMessage[]>([]);
 
-  // Load messages from DB
+  // Load leader messages from DB
   useEffect(() => {
     const load = async () => {
       const supabase = createClient();
@@ -110,32 +137,30 @@ export function ProjectChatWrapper({ children }: { children: ReactNode }) {
         .from("project_chat_messages")
         .select("id, step, role, content, metadata, created_at")
         .eq("project_id", projectId)
+        .eq("step", LEADER_STEP)
         .order("created_at", { ascending: true });
 
       if (data) {
-        const grouped: Record<number, ChatMessage[]> = {};
-        for (const row of data) {
-          if (!grouped[row.step]) grouped[row.step] = [];
-          grouped[row.step].push({
+        setDbMessages(
+          data.map((row) => ({
             id: row.id,
             role: row.role as "user" | "assistant",
             content: row.content,
-            step: row.step,
+            step: LEADER_STEP,
             createdAt: row.created_at,
-          });
-        }
-        setDbMessages(grouped);
+          }))
+        );
       }
     };
     load();
   }, [projectId]);
 
-  // useChat for current step
+  // useChat for leader (single instance, not per-step)
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
-        api: "/api/ai/project-chat",
-        body: { projectId, step: currentStep },
+        api: "/api/ai/leader-chat",
+        body: { projectId, currentDisplayStep: currentStep },
       }),
     [projectId, currentStep]
   );
@@ -147,73 +172,72 @@ export function ProjectChatWrapper({ children }: { children: ReactNode }) {
     setMessages,
   } = useChat({
     transport,
-    id: `project-chat-${projectId}-${currentStep}`,
+    id: `leader-chat-${projectId}`,
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
 
-  // Initialize useChat messages from DB when step changes
+  // Initialize useChat messages from DB on mount
+  const initializedRef = useRef(false);
   useEffect(() => {
-    const stepMsgs = dbMessages[currentStep] || [];
-    if (stepMsgs.length > 0) {
+    if (initializedRef.current) return;
+    if (dbMessages.length > 0) {
+      initializedRef.current = true;
       setMessages(
-        stepMsgs.map((m) => ({
+        dbMessages.map((m) => ({
           id: m.id,
           role: m.role,
           parts: [{ type: "text" as const, text: m.content }],
           createdAt: new Date(m.createdAt),
         }))
       );
-    } else {
-      setMessages([]);
     }
-  }, [currentStep, dbMessages, setMessages]);
+  }, [dbMessages, setMessages]);
 
-  // Detect <!--APPLY--> in completed messages and fire handler
-  const processedAppliesRef = useRef<Set<string>>(new Set());
+  // Detect <!--APPLY--> and <!--DISPLAY--> in completed messages
+  const processedMarkersRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (isStreaming) return;
     for (const m of streamMessages) {
       if (m.role !== "assistant") continue;
-      if (processedAppliesRef.current.has(m.id)) continue;
+      if (processedMarkersRef.current.has(m.id)) continue;
 
       const text = m.parts
         .filter((p) => p.type === "text")
         .map((p) => ("text" in p ? p.text : ""))
         .join("");
 
+      // Check for DISPLAY marker
+      const { displayStep } = parseDisplay(text);
+      if (displayStep && displayStep !== currentStep) {
+        router.push(`/projects/${projectId}/${getStepPath(displayStep)}`);
+      }
+
+      // Check for APPLY marker
       const { payload } = parseApply(text);
-      if (payload && applyHandlerRef.current) {
-        processedAppliesRef.current.add(m.id);
-        applyHandlerRef.current(payload);
+      if (payload) {
+        processedMarkersRef.current.add(m.id);
+        const targetStep = payload.target_step || currentStep;
+
+        if (targetStep === currentStep && applyHandlerRef.current) {
+          // Current step page can handle it
+          applyHandlerRef.current(payload);
+        } else if (targetStep !== currentStep) {
+          // Navigate first, then apply when handler is registered
+          pendingApplyRef.current = payload;
+          router.push(`/projects/${projectId}/${getStepPath(targetStep)}`);
+        }
+      } else {
+        // Mark as processed even without APPLY (to avoid re-processing DISPLAY)
+        processedMarkersRef.current.add(m.id);
       }
     }
-  }, [streamMessages, isStreaming]);
+  }, [streamMessages, isStreaming, currentStep, projectId, router]);
 
-  // Build allMessages for display (all steps + current stream)
+  // Build allMessages for display
   const allMessages = useMemo(() => {
     const result: ChatMessage[] = [];
 
-    // Past steps from DB (clean markers from stored messages)
-    for (let step = 1; step < currentStep; step++) {
-      const msgs = dbMessages[step] || [];
-      for (const m of msgs) {
-        if (m.role === "assistant") {
-          const { cleanText: afterOptions, options } = parseOptions(m.content);
-          const { cleanText } = parseApply(afterOptions);
-          const cleaned: ChatMessage = { ...m, content: cleanText };
-          if (options && options.length > 0) {
-            cleaned.options = options;
-            cleaned.optionsSelected = true; // Past options are already resolved
-          }
-          result.push(cleaned);
-        } else {
-          result.push(m);
-        }
-      }
-    }
-
-    // Current step: use streaming messages (more up-to-date than DB)
     for (const m of streamMessages) {
       const rawText = m.parts
         .filter((p) => p.type === "text")
@@ -221,15 +245,16 @@ export function ProjectChatWrapper({ children }: { children: ReactNode }) {
         .join("");
       if (!rawText.trim()) continue;
 
-      // Parse markers
+      // Parse and strip all markers
       const { cleanText: afterOptions, options } = parseOptions(rawText);
-      const { cleanText, payload: _payload } = parseApply(afterOptions);
+      const { cleanText: afterApply } = parseApply(afterOptions);
+      const { cleanText } = parseDisplay(afterApply);
 
       const msg: ChatMessage = {
         id: m.id,
         role: m.role as "user" | "assistant",
         content: cleanText,
-        step: currentStep,
+        step: LEADER_STEP,
         createdAt: new Date().toISOString(),
       };
 
@@ -242,7 +267,7 @@ export function ProjectChatWrapper({ children }: { children: ReactNode }) {
     }
 
     return result;
-  }, [dbMessages, streamMessages, currentStep, selectedOptions]);
+  }, [streamMessages, selectedOptions]);
 
   const sendMessage = useCallback(
     (text: string) => {
@@ -255,7 +280,6 @@ export function ProjectChatWrapper({ children }: { children: ReactNode }) {
   const selectOption = useCallback(
     (messageId: string, option: ChatOption) => {
       setSelectedOptions((prev) => ({ ...prev, [messageId]: option.id }));
-      // Send the selection as a follow-up message
       chatSend({ text: `「${option.label}」を選択します。この方向で進めてください。` });
     },
     [chatSend]
@@ -265,9 +289,8 @@ export function ProjectChatWrapper({ children }: { children: ReactNode }) {
     setIsPanelOpen((prev) => !prev);
   }, []);
 
-  // Summarize current step's conversation before moving to next step
+  // Summarize is still available for step pages that call it
   const summarizeCurrentStep = useCallback(async () => {
-    // Only summarize if there are messages for the current step
     const hasMessages = streamMessages.some(
       (m) => m.role === "assistant" || m.role === "user"
     );

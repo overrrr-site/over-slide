@@ -142,62 +142,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-/** Step-specific empty state hints */
-function EmptyStateHints({ step }: { step: number }) {
-  const hints: Record<number, { title: string; examples: string[] }> = {
-    1: {
-      title: "リサーチメモの編集をお手伝いします",
-      examples: [
-        "「競合比較のセクションを追記して」",
-        "「数値データの出典を補強して」",
-        "「次の工程に向けて足りない情報は？」",
-      ],
-    },
-    2: {
-      title: "ページ構成の修正をお手伝いします",
-      examples: [
-        "「3ページ目をもっとインパクトある内容に」",
-        "「全体の流れを見直して」",
-        "「ページを1枚追加したい」",
-      ],
-    },
-    3: {
-      title: "各ページの詳細を一緒にブラッシュアップ",
-      examples: [
-        "「4ページ目の表現をもっと具体的に」",
-        "「KPIの数値を目立たせたい」",
-        "「全体のトーンを統一して」",
-      ],
-    },
-    4: {
-      title: "レビュー結果について相談できます",
-      examples: [
-        "「この指摘はどう改善すべき？」",
-        "「優先的に直すべき箇所は？」",
-        "「修正の方向性を相談したい」",
-      ],
-    },
-    5: {
-      title: "スライドデザインの修正をお手伝いします",
-      examples: [
-        "「2枚目のレイアウトをすっきりさせて」",
-        "「タイトルのフォントを大きく」",
-        "「全体の配色を落ち着いたトーンに」",
-      ],
-    },
-    6: {
-      title: "デザインレビューについて相談できます",
-      examples: [
-        "「この指摘のデザイン改善案は？」",
-        "「フォントの統一性を確認したい」",
-        "「修正の優先順位を教えて」",
-      ],
-    },
-  };
-
-  const hint = hints[step] || {
-    title: "資料作成をお手伝いします",
-    examples: ["「ここを修正して」", "「方向性を相談したい」"],
+/** Leader AI empty state hints (step-independent) */
+function EmptyStateHints() {
+  const hint = {
+    title: "AI編集チャットに何でも相談できます",
+    examples: [
+      "「構成を見せて」",
+      "「3ページ目をもっとインパクトある内容に」",
+      "「全体の流れを見直して」",
+      "「次にやるべきことは？」",
+    ],
   };
 
   return (
@@ -229,7 +183,7 @@ export function ChatMessageList({ messages, isStreaming, currentStep }: ChatMess
   }, [messages.length, isStreaming]);
 
   if (messages.length === 0) {
-    return <EmptyStateHints step={currentStep} />;
+    return <EmptyStateHints />;
   }
 
   // Group messages and insert step separators

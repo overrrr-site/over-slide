@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertInput, parseJsonBody } from "@/lib/api/validation";
-import { opus } from "@/lib/ai/anthropic";
+import { sonnet } from "@/lib/ai/anthropic";
 import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
 import { cachedGenerateText } from "@/lib/ai/cached-generation";
 import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
@@ -104,8 +104,8 @@ page_number は ${pageNumber} のまま変更しないでください。
         supabase,
         teamId,
         endpoint: "/api/ai/structure/revise",
-        modelName: "claude-opus-4-6",
-        model: opus,
+        modelName: "claude-sonnet-4-5-20250929",
+        model: sonnet,
         system: STRUCTURE_PROMPT,
         prompt,
         providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
@@ -118,7 +118,7 @@ page_number は ${pageNumber} のまま変更しないでください。
         supabase,
         endpoint: "/api/ai/structure/revise",
         operation: "generateText",
-        model: "claude-opus-4-6",
+        model: "claude-sonnet-4-5-20250929",
         userId: user.id,
         teamId,
         projectId,

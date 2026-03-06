@@ -23,13 +23,15 @@ export interface ChatOption {
 /** Payload from <!--APPLY--> markers */
 export interface ApplyPayload {
   action: string;
+  /** Leader specifies which step this APPLY targets */
+  target_step?: number;
   [key: string]: unknown;
 }
 
 export interface ProjectChatContextValue {
-  /** All messages across steps (for display) */
+  /** All messages (leader chat) */
   allMessages: ChatMessage[];
-  /** Current step number */
+  /** Current step number (derived from URL) */
   currentStep: number;
   /** Whether AI is streaming */
   isStreaming: boolean;

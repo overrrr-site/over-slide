@@ -1,6 +1,6 @@
 import { streamText } from "ai";
 import { parseJsonBody } from "@/lib/api/validation";
-import { opus } from "@/lib/ai/anthropic";
+import { sonnet } from "@/lib/ai/anthropic";
 import { ANTHROPIC_PROMPT_CACHE_LONG } from "@/lib/ai/anthropic-cache";
 import { extractAnthropicCacheMetrics } from "@/lib/ai/cache-metadata";
 import { recordAiUsage } from "@/lib/ai/usage-logger";
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
         .join("\n");
 
       const result = streamText({
-        model: opus,
+        model: sonnet,
         system: systemPrompt,
         prompt,
         providerOptions: ANTHROPIC_PROMPT_CACHE_LONG,
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
             supabase,
             endpoint: "/api/ai/structure",
             operation: "streamText",
-            model: "claude-opus-4-6",
+            model: "claude-sonnet-4-5-20250929",
             userId: user.id,
             teamId: profile.team_id,
             projectId,
