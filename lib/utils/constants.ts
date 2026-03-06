@@ -52,7 +52,6 @@ export const WORKFLOW_STEPS = [
   { id: 3, name: "詳細作成", path: "details" },
   { id: 4, name: "内容レビュー", path: "content-review" },
   { id: 5, name: "デザイン化", path: "design" },
-  { id: 6, name: "最終レビュー", path: "design-review" },
 ] as const;
 
 /** ワークフローステップを返す */

@@ -184,7 +184,7 @@ export default function DesignPage() {
     }
   };
 
-  // Complete design and move to review
+  // Complete design (final step)
   const completeDesign = async () => {
     await summarizeCurrentStep();
     const supabase = createClient();
@@ -192,7 +192,7 @@ export default function DesignPage() {
       .from("projects")
       .update({ current_step: 6 })
       .eq("id", projectId);
-    router.push(`/projects/${projectId}/design-review`);
+    router.refresh();
   };
 
   // Memoize iframe srcDoc for each slide
@@ -238,7 +238,7 @@ export default function DesignPage() {
               disabled={slides.length === 0}
               className="rounded-md bg-green px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green/90 disabled:opacity-50"
             >
-              デザイン完了 → 最終レビューへ
+              デザイン完了
             </button>
           </div>
         </div>
