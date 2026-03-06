@@ -11,6 +11,7 @@ export function buildLeaderSystemPrompt(context: {
   detailsContext: string;
   designContext: string;
   ragContext: string;
+  stalenessContext: string;
   currentDisplayStep: number;
 }): string {
   const {
@@ -21,6 +22,7 @@ export function buildLeaderSystemPrompt(context: {
     detailsContext,
     designContext,
     ragContext,
+    stalenessContext,
     currentDisplayStep,
   } = context;
 
@@ -65,6 +67,26 @@ export function buildLeaderSystemPrompt(context: {
 - 構成を変更 → 詳細も更新が必要か？
 - リサーチを追加 → 構成や詳細に反映すべきか？
 - 影響が大きい場合は、ユーザーに確認してから進める
+
+### ⑥ ステップ間の連動
+「古くなっている可能性のある工程」セクションが表示されたら、以下のルールに従う:
+
+**連動の判断:**
+- 構成変更の後に詳細が古くなっている場合:
+  - ページの追加・削除・大幅な内容変更 → 「詳細も更新しましょうか？」とユーザーに確認
+  - タイトルやnotesの微修正のみ → 「構成を修正しました」と報告するだけ（確認不要）
+- ユーザーが「更新して」と答えたら、影響を受けるページの詳細を APPLY で更新する
+
+**影響度の分類:**
+- 小さい変更（1-2ページの微修正）→ 確認なしですぐに APPLY
+- 中くらいの変更（3-4ページ）→ テキストで「更新しますか？」と確認
+- 大きい変更（5ページ以上、ページ数の増減）→ OPTIONS で選択肢を提示:
+  例: 「全ページの詳細を再生成する」「影響のあるページだけ更新する」「今は更新しない」
+
+**実行の原則:**
+- 連動変更は段階的に実行する（1回の応答に1つの APPLY）
+- 構成の APPLY を先に送り、次の応答で詳細の APPLY を送る
+- ユーザーに見える形で進める（裏で勝手にやらない）
 
 ### ④ 変更の実行
 具体的な修正は <!--APPLY--> マーカーで適用する（後述）
@@ -131,5 +153,5 @@ export function buildLeaderSystemPrompt(context: {
 - page_number は既存の番号を維持する
 - 1回の応答に OPTIONS と APPLY を両方含めない
 - テキスト部分で何を変更するか説明してから、マーカーを付加する
-${briefSummary ? `\n\n## ブリーフシート\n${briefSummary}` : ""}${summaryBlock}${dataBlock}${ragContext ? `\n\n## ナレッジベースからの参考情報\n${ragContext}` : ""}`;
+${briefSummary ? `\n\n## ブリーフシート\n${briefSummary}` : ""}${summaryBlock}${dataBlock}${stalenessContext ? `\n\n${stalenessContext}` : ""}${ragContext ? `\n\n## ナレッジベースからの参考情報\n${ragContext}` : ""}`;
 }

@@ -17,6 +17,7 @@ import {
   loadDetailsContext,
   loadDesignContext,
   loadBriefContext,
+  loadStalenessContext,
 } from "@/lib/ai/context-loaders";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -203,6 +204,7 @@ export async function POST(request: Request) {
         briefSummary,
         summaries,
         ragContext,
+        stalenessContext,
       ] = await Promise.all([
         loadResearchContext(supabase, projectId),
         loadStructureContext(supabase, projectId),
@@ -211,6 +213,7 @@ export async function POST(request: Request) {
         loadBriefContext(supabase, projectId),
         summariesLoader,
         ragLoader,
+        loadStalenessContext(supabase, projectId),
       ]);
 
       // Window messages with larger budget for Opus
@@ -228,6 +231,7 @@ export async function POST(request: Request) {
         detailsContext,
         designContext,
         ragContext,
+        stalenessContext,
         currentDisplayStep: displayStep,
       });
 

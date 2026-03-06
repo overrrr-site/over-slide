@@ -123,6 +123,69 @@ export async function loadDesignContext(
   return compactJsonForPrompt(metadata);
 }
 
+/** Detect stale downstream steps by comparing updated_at timestamps */
+export async function loadStalenessContext(
+  supabase: SupabaseClient,
+  projectId: string
+): Promise<string> {
+  // Fetch the latest structure with its id and updated_at
+  const { data: structRow } = await supabase
+    .from("structures")
+    .select("id, updated_at")
+    .eq("project_id", projectId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!structRow?.updated_at) return "";
+
+  const structTime = new Date(structRow.updated_at as string).getTime();
+
+  // Fetch latest page_contents updated_at and latest generated_files created_at in parallel
+  const [detailsResult, designResult] = await Promise.all([
+    supabase
+      .from("page_contents")
+      .select("updated_at")
+      .eq("structure_id", structRow.id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("generated_files")
+      .select("created_at")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const detailsTime = detailsResult.data?.updated_at
+    ? new Date(detailsResult.data.updated_at as string).getTime()
+    : 0;
+  const designTime = designResult.data?.created_at
+    ? new Date(designResult.data.created_at as string).getTime()
+    : 0;
+
+  const staleSteps: string[] = [];
+
+  if (detailsTime > 0 && structTime > detailsTime) {
+    staleSteps.push(
+      "- 工程3（詳細）: 構成が更新された後、各ページの詳細テキストがまだ更新されていません"
+    );
+  }
+
+  if (designTime > 0) {
+    if (structTime > designTime || (detailsTime > 0 && detailsTime > designTime)) {
+      staleSteps.push(
+        "- 工程5（デザイン）: 上流のデータが更新された後、スライドがまだ再生成されていません"
+      );
+    }
+  }
+
+  if (staleSteps.length === 0) return "";
+  return `## 古くなっている可能性のある工程\n${staleSteps.join("\n")}`;
+}
+
 /** Load brief sheet as a compact summary (for leader context) */
 export async function loadBriefContext(
   supabase: SupabaseClient,
