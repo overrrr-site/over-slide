@@ -25,9 +25,16 @@ export interface PdfConvertOptions {
  * Locally falls back to the full puppeteer package with its bundled Chrome.
  */
 async function launchBrowser() {
+  // Use require() instead of dynamic import() to avoid webpack module
+  // resolution errors (__webpack_modules__[moduleId] is not a function).
+  // These packages are in serverExternalPackages but webpack dev mode
+  // still fails to handle dynamic import() for them correctly.
+
   if (IS_SERVER) {
-    const chromium = (await import("@sparticuz/chromium")).default;
-    const puppeteerCore = (await import("puppeteer-core")).default;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const chromium = require("@sparticuz/chromium");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const puppeteerCore = require("puppeteer-core");
 
     return puppeteerCore.launch({
       args: chromium.args,
@@ -37,7 +44,8 @@ async function launchBrowser() {
   }
 
   // Local dev: use full puppeteer
-  const puppeteer = (await import("puppeteer")).default;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const puppeteer = require("puppeteer");
   return puppeteer.launch({
     headless: true,
     args: [

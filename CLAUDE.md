@@ -1,3 +1,88 @@
+# Over-Slide - 提案書自動生成アプリ
+
+## コミュニケーション
+- 全て日本語で回答
+- 技術用語は使わない（使う場合は平易な言い換えを先に置く）
+
+## テクスタック
+
+### フロントエンド
+- Next.js 16.1.6 + React 19 + TypeScript
+- Tailwind CSS 4
+- @dnd-kit (ドラッグ＆ドロップ)
+- @iconify/react (アイコン)
+
+### AI連携
+- AI SDK (`ai` パッケージ)
+- @ai-sdk/anthropic (Claude)
+- @ai-sdk/google (Gemini)
+- @ai-sdk/openai (GPT)
+
+### ドキュメント処理
+- pptxgenjs (PPTX生成)
+- docx (Word生成)
+- xlsx (Excel処理)
+- pdf-parse (PDF読み取り)
+- officeparser (汎用パーサー)
+- puppeteer + @sparticuz/chromium (PDF出力・スクリーンショット)
+- sharp (画像処理)
+
+### バックエンド
+- Supabase (@supabase/supabase-js + @supabase/ssr)
+- zod (バリデーション)
+
+## ディレクトリ構造
+```
+over-slide/
+├── app/
+│   ├── (app)/          # メインアプリルート
+│   ├── (auth)/         # 認証ルート
+│   ├── api/            # APIルート
+│   ├── layout.tsx
+│   └── globals.css
+├── components/
+│   ├── design/         # デザイン関連
+│   ├── details/        # 詳細ページ
+│   ├── discussion/     # ディスカッション
+│   ├── knowledge/      # ナレッジベース
+│   ├── layout/         # レイアウト
+│   ├── project/        # プロジェクト管理
+│   ├── research/       # リサーチ
+│   ├── review/         # レビュー
+│   ├── structure/      # 構成
+│   └── ui/             # 共通UIパーツ
+├── lib/
+│   ├── ai/             # AI連携ロジック
+│   ├── api/            # API呼び出し
+│   ├── brief-sheet/    # ブリーフシート処理
+│   ├── docx/           # Word出力
+│   ├── files/          # ファイル操作
+│   ├── knowledge/      # ナレッジベース
+│   ├── pptx/           # PPTX出力
+│   ├── research/       # リサーチ処理
+│   ├── slides/         # スライド処理
+│   ├── style-guide/    # スタイルガイド
+│   ├── supabase/       # Supabase接続
+│   └── utils/          # ユーティリティ
+├── types/              # TypeScript型定義
+├── hooks/              # カスタムフック
+└── docs/               # ドキュメント
+```
+
+## 開発コマンド
+- `npm run dev` - 開発サーバー (Turbopack, 8GB)
+- `npm run dev:light` - 軽量開発サーバー (Webpack, 4GB)
+- `npm run build` - 本番ビルド
+- `npm run db:seed` - DBシード実行
+
+## デプロイ
+```bash
+git push origin main
+# → Vercel自動デプロイ
+```
+
+---
+
 ## ワークフローのオーケストレーション（日本語版・統合）
 
 ### 0. 運用ルール（あなたが入力した内容に対する実行指示）

@@ -108,8 +108,9 @@ export function formatRetrievedContext(chunks: RetrievedChunk[]): string {
       typeof chunk.metadata.docTitle === "string"
         ? ` 出典:${chunk.metadata.docTitle}`
         : "";
+    const score = Math.round(chunk.similarity * 100);
     const content = chunk.content.trim().replace(/\n{3,}/g, "\n\n");
-    return `[KB${i + 1}${source}]\n${content}`;
+    return `[KB${i + 1}${source} 関連度:${score}%]\n${content}`;
   });
 
   return `\n\n[ナレッジ参照]\n${sections.join("\n\n")}`;

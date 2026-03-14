@@ -1,7 +1,7 @@
 import { formatRetrievedContext, searchKnowledge } from "@/lib/knowledge/retriever";
 import { sanitizeText, truncateForPrompt } from "@/lib/research/text-utils";
 
-const KNOWLEDGE_CONTEXT_CHARS = 6_000;
+const KNOWLEDGE_CONTEXT_CHARS = 4_000;
 
 interface FetchResearchKnowledgeContextParams {
   teamId: string | null;
@@ -27,18 +27,19 @@ function normalizeForQuery(value: string, maxChars: number): string {
 function buildResearchKnowledgeQuery(
   params: FetchResearchKnowledgeContextParams
 ): string {
+  // キーワードと未解決課題だけに絞る。
+  // ブリーフ・メモ・指示を混ぜるとクエリの焦点がぼけて
+  // 関連の薄いチャンクが返ってくる原因になる。
   const unresolved = (params.unresolvedIssues || [])
-    .slice(0, 5)
-    .map((item) => normalizeForQuery(item, 140))
+    .slice(0, 3)
+    .map((item) => normalizeForQuery(item, 100))
     .filter(Boolean)
     .join(" ");
 
   return [
     normalizeForQuery(params.keywords || "", 320),
     unresolved,
-    normalizeForQuery(params.instruction || "", 220),
-    normalizeForQuery(params.briefSheet || "", 420),
-    normalizeForQuery(params.memo || "", 260),
+    normalizeForQuery(params.instruction || "", 160),
   ]
     .filter(Boolean)
     .join(" ")
@@ -62,8 +63,8 @@ export async function fetchResearchKnowledgeContext(
       teamId: params.teamId,
       chunkTypes: ["content"],
       purpose: "content",
-      limit: params.limit ?? 6,
-      threshold: params.threshold ?? 0.2,
+      limit: params.limit ?? 4,
+      threshold: params.threshold ?? 0.35,
     });
 
     const rawContext = formatRetrievedContext(chunks);
