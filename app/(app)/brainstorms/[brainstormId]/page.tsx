@@ -270,6 +270,10 @@ export default function BrainstormDetailPage() {
   };
 
   const handleComplete = async () => {
+    // ブリーフシートが未生成なら先に生成する
+    if (!briefSheet) {
+      await generateBriefSheet();
+    }
     await fetch(`/api/brainstorms/${brainstormId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
